@@ -26,6 +26,11 @@ All notable changes to this framework are documented here. The format follows
 
 ### Changed
 
+- `commit-and-push`: the leak scan before a public push must block the push. A hit exits non-zero, and
+  a warning followed by `scan; git push` is not a gate.
+- `test-driven-development`: when a bug writes to the wrong place, the RED run performs that write.
+  The test asserts the resolved target before the write, and fixtures stay away from real user state.
+- `windows-agent-tooling`: `node -e` escape problems also happen in Git Bash, so use a script file.
 - `/next-steps` keeps every open item from its report as an action item in the harness task list, with
   the owner in the title, or as an `A1..An` checklist when there is no task list. `/step-by-step` takes
   its steps from those items. It keeps one item in progress at a time, closes each only after its check
