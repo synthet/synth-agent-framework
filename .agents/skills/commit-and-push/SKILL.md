@@ -35,6 +35,7 @@ python .claude/skills/commit-and-push/scripts/harness.py --execute --push --json
 - Prefer explicit path staging when unrelated dirty files exist (inspect `paths` first).
 - **Shared checkouts:** before writing in a repo, `git fetch` and check `HEAD..origin/<default>` and peer sessions; commit on a branch but return the checkout to its default branch; stage only your hunks when a file also holds someone else's edits; regenerate generated files in a clean worktree. Recipes: [references/shared-checkouts.md](references/shared-checkouts.md). Why: other sessions merge, switch branches and commit in the same checkout.
 - **Repository visibility:** before pushing or recommending a push, run `gh repo view --json visibility`. If it's `PUBLIC`, first scan the added lines for machine paths and identities. Why: a public push can be copied at once, so deleting it later doesn't undo it.
+  The scan must block the push, not just report on it. Run it as its own step that exits non-zero on a hit, or in Bash with `set -e` and `exit 1` on a match, and push only after it passes. In PowerShell, `scan; git push` still runs the push after a hit. A printed warning followed by a push is not a gate.
 
 ## Human / safety (enforced)
 
