@@ -484,6 +484,13 @@
       "projects": []
     },
     {
+      "id": "cross-pc-messages",
+      "source": ".claude/skills/cross-pc-messages",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
       "pack": "global",
