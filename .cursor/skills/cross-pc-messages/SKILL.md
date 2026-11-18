@@ -103,6 +103,8 @@ commit, and the share holds its manifest at `private/guides/cross-pc-messages/v<
   `~/.gemini/antigravity-cli` skill trees; absent trees are skipped) with the newest manifest. It prints
   `same v<N>` per copy, or the differing files, and exits 1 on drift. A running copy outside those trees is
   labelled `source`, and only its non-Markdown files are compared: the installer rewrites Markdown.
+- Hashes ignore line endings: text files hash with CRLF normalized to LF, so a Windows checkout and an LF
+  tree of the same commit match. Binary files hash as-is.
 - `python $M manifest <installed skill dir>` prints `SHA256SUMS`. Build the release manifest from an
   **installed** copy, never from the repo, because the installed bundle differs in its Markdown files.
   Publishing it into the share is a reviewed release step.
