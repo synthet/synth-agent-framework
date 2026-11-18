@@ -144,6 +144,20 @@ def test_cross_topic_reply_and_fyi(share, capsys):
     assert rows["idea-2026-11-18"] == ("your turn", 1)
 
 
+def test_reply_body_file_is_atomic(share, tmp_path, capsys):
+    (share / "beta-to-alpha" / "ping-2026-11-18.md").write_text("# ping\n", encoding="utf-8")
+    body = tmp_path / "body.md"
+    body.write_text("## Answer\n\n1. \n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        mail.main(["reply", "--to", "beta", "--re", "ping-2026-11-18.md", "--kind", "ack", "--body-file", str(body)])
+    assert not (share / "alpha-to-beta" / "ping-2026-11-18-ack.md").exists()
+    body.write_text("## Answer\n\npong\n", encoding="utf-8")
+    assert mail.main(["reply", "--to", "beta", "--re", "ping-2026-11-18.md", "--kind", "ack", "--body-file", str(body)]) == 0
+    text = (share / "alpha-to-beta" / "ping-2026-11-18-ack.md").read_text(encoding="utf-8")
+    assert "pong" in text and "**Replies to:**" in text and "<one sentence" not in text
+    assert mail.main(["check", str(share / "alpha-to-beta" / "ping-2026-11-18-ack.md")]) == 0
+
+
 def test_ack_kind_and_reply_to_reply_keeps_topic(share, capsys):
     (share / "beta-to-alpha" / "ask-2026-11-18-result.md").write_text("# r\n", encoding="utf-8")
     assert mail.main(["reply", "--to", "beta", "--re", "ask-2026-11-18-result.md", "--kind", "ack"]) == 0

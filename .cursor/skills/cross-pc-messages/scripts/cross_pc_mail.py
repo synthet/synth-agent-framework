@@ -12,7 +12,7 @@ Commands:
   status [--since DAYS]       threads per peer (topic + its -reply/-result/... follow-ups); whose turn it is
   new   --to PEER --topic T   package <T>-<date>/README.md (--note: one <T>-<date>.md). --print shows the
                               template only; --from-file DRAFT writes a checked local draft (atomic send)
-  reply --to PEER --re NAME   <topic>-<kind>.md (--kind reply|result|status|ack) in your outgoing folder
+  reply --to PEER --re NAME   <topic>-<kind>.md (--kind reply|result|status|ack); --body-file DRAFT = atomic reply
   watch [--once]              print NEW:/CHANGED: lines for incoming files; --once exits on the first event
   check PATH...               flag secrets and unfilled placeholders before you send
   manifest                    print SHA256SUMS for this skill copy (writes nothing)
@@ -343,7 +343,18 @@ def cmd_reply(args) -> int:
                          sender=f"agent on {c['host']}", receiver=f"agent on {args.to}",
                          reply=f"{args.to}-to-{c['host']}/{base}-<kind>.md")
     text = text.replace("- **Purpose:**", f"- **Replies to:** [`{inbox.name}/{original.name}`]({link})\n- **Purpose:**")
-    text += "\n## Answer\n\n"
+    if args.body_file:  # atomic reply: generated header + drafted body, written only if clean
+        body = norm(args.body_file).read_text(encoding="utf-8")
+        head = [line for line in text.splitlines() if "**Purpose:**" not in line and "**Don't:**" not in line]
+        text = "\n".join(head) + "\n\n" + body
+        findings = scan(text.splitlines())
+        if findings:
+            for n, kind in findings:
+                print(f"{target.name} (draft):{n}: {kind}")
+            sys.exit(FIX_HINT.format(n=len(findings)) + ". Nothing was written to the share.")
+    else:
+        text += "\n## Answer\n\n"
+        print("Fill in Purpose, Don't and the answer, then run `check` until it prints clean.", file=sys.stderr)
     target.write_text(text, encoding="utf-8")
     print(target)
     return 0
@@ -495,6 +506,7 @@ def main(argv=None) -> int:
     p.add_argument("--to", required=True)
     p.add_argument("--re", required=True, help="incoming item name, e.g. setup-2026-11-14 or note-2026-11-14.md")
     p.add_argument("--kind", choices=REPLY_KINDS, default="reply")
+    p.add_argument("--body-file", help="local draft of the answer; the reply is written only if `check` passes")
     p = sub.add_parser("watch")
     p.add_argument("--once", action="store_true", help="exit after the first batch of events")
     p.add_argument("--all", action="store_true", help="also watch your outgoing folders")

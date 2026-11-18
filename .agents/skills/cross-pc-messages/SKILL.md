@@ -57,8 +57,9 @@ reaches the other PC before you finish it.
 
 ## Reply
 
-`python $M reply --to <peer> --re <incoming-name> --kind reply|result|status|ack` creates
-`<topic>-<kind>.md` in your outgoing folder with a "Replies to" link. A reply to a reply keeps the thread's
+`python $M reply --to <peer> --re <incoming-name> --kind reply|result|status|ack --body-file answer.md` creates
+`<topic>-<kind>.md` in your outgoing folder: a generated header with a "Replies to" link, then your drafted
+answer. Like `new --from-file`, it writes only if `check` would pass. A reply to a reply keeps the thread's
 base topic (`x-result.md` → `x-ack.md`), so names don't grow. Any `<topic>-<suffix>` (`-warning`, `-parity`)
 joins the same thread. A message whose `Replies to:` field links other items (several links allowed, wrapped
 lines included) counts in those threads too, so one reply can answer several topics.
