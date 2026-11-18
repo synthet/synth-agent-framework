@@ -34,7 +34,7 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = "1"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
+VERSION = "2"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
 SKILL_DIR = Path(__file__).resolve().parents[1]
 RELEASES = Path("private/guides/cross-pc-messages")  # relative to the share root
 # Global skill trees, as installed by the framework's agent_setup.py.
@@ -408,8 +408,16 @@ def cmd_check(args) -> int:
     return 1 if hits else 0
 
 
+TEXT_SUFFIXES = {".md", ".py", ".json", ".txt", ".toml", ".yaml", ".yml", ".ps1", ".sh", ".js"}
+
+
 def sha256(p: Path) -> str:
-    return hashlib.sha256(p.read_bytes()).hexdigest()
+    """Content hash. Text files hash with CRLF normalized to LF, so a copy from a Windows checkout
+    (core.autocrlf=true) and one from an LF tree of the same commit hash the same."""
+    data = p.read_bytes()
+    if p.suffix.lower() in TEXT_SUFFIXES:
+        data = data.replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def skill_files(skill_dir: Path) -> dict[str, str]:

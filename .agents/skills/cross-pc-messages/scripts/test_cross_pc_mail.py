@@ -70,6 +70,33 @@ def test_manifest_and_verify_detect_drift(share, tmp_path, monkeypatch, capsys):
     assert f"DRIFT v{mail.VERSION}  {installed}  scripts/cross_pc_mail.py" in capsys.readouterr().out
 
 
+def test_verify_ignores_line_endings_but_not_content(share, tmp_path, monkeypatch, capsys):
+    """One PC installs from an LF tree, the other from a CRLF (autocrlf) checkout of the same commit."""
+    files = {"SKILL.md": b"skill\nline two\n", "scripts/cross_pc_mail.py": b"print(1)\nprint(2)\n",
+             "assets/logo.bin": b"\x00\r\n\x01"}  # binary: hashed as-is
+    trees = {}
+    for name, eol in (("lf", b"\n"), ("crlf", b"\r\n")):
+        d = tmp_path / name / "skills" / "cross-pc-messages"
+        for rel, data in files.items():
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            (d / rel).write_bytes(data if rel.endswith(".bin") else data.replace(b"\n", eol))
+        trees[name] = d
+    monkeypatch.setattr(mail, "SKILL_DIR", trees["lf"])
+    monkeypatch.setattr(mail, "INSTALL_TREES", tuple(str(d.parent) for d in trees.values()))
+    assert mail.main(["manifest", str(trees["crlf"])]) == 0
+    crlf_sums = capsys.readouterr().out
+    assert mail.main(["manifest", str(trees["lf"])]) == 0
+    assert capsys.readouterr().out == crlf_sums  # same manifest from either checkout
+    release = share / "private" / "guides" / "cross-pc-messages" / f"v{mail.VERSION}"
+    release.mkdir(parents=True)
+    (release / "SHA256SUMS").write_text(crlf_sums, encoding="utf-8")
+    assert mail.main(["verify"]) == 0
+    assert capsys.readouterr().out.count(f"same v{mail.VERSION}") == 2
+    (trees["crlf"] / "scripts" / "cross_pc_mail.py").write_bytes(b"print(1)\r\nprint(3)\r\n")
+    assert mail.main(["verify"]) == 1
+    assert "DRIFT" in capsys.readouterr().out
+
+
 def test_status_skips_folders_without_readme(share, capsys):
     (share / "beta-to-alpha" / "ssh").mkdir()
     (share / "beta-to-alpha" / "ssh" / "beta.pub").write_text("ssh-ed25519 AAAA example\n", encoding="utf-8")
