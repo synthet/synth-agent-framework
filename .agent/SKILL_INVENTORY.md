@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-15. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-18. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -19,6 +19,7 @@ commands or edit code/config as part of its procedure.
 | bg-status | Read-only snapshot of background work (Claude tasks, detached workers, GPU, Docker, logs, worktrees, peer sessions), flags first; optional per-project probes in `.claude/bg-status.json`, `docker exec` probes only with `--exec-probes` | L1 | 2026-11-02 |
 | backlog-queue | Provider-oriented backlog queue; local markdown, GitHub Issues, optional GitHub Projects | L2 | 2026-07-01 |
 | commit-conventions | Conventional Commits and PR title wording | L1 | 2026-07-01 |
+| cross-pc-messages | Messages between PCs through a shared synced folder (`<from>-to-<to>`): whoami, threads with whose turn it is, new package / reply with the standard header, `watch` (one-shot or streaming), and a secret check on outgoing text. The share's `AGENTS.md` stays the authority; the helper only adds files (writes sync to every PC) | L2 | 2026-11-18 |
 | commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-04 |
 | critical-commit-audit | Deep post-commit hunt for high-severity bugs | L2 | 2026-07-01 |
 | eval | Capture task quality signals to agent memory (**compiled harness**) | L2 | 2026-07-21 |
