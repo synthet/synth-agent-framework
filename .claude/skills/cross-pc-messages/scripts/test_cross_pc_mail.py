@@ -51,20 +51,30 @@ def test_manifest_and_verify_detect_drift(share, tmp_path, monkeypatch, capsys):
     (skill / "scripts" / "cross_pc_mail.py").write_text("print(1)\n", encoding="utf-8")
     installed = tmp_path / "home" / "skills" / "cross-pc-messages"
     (installed / "scripts").mkdir(parents=True)
-    (installed / "SKILL.md").write_text("skill\n", encoding="utf-8")
+    # The installer rewrites Markdown (e.g. appends a line to SKILL.md); scripts are copied as-is.
+    (installed / "SKILL.md").write_text("skill\nResolve helper paths from this skill directory.\n", encoding="utf-8")
     (installed / "scripts" / "cross_pc_mail.py").write_text("print(1)\n", encoding="utf-8")
     monkeypatch.setattr(mail, "SKILL_DIR", skill)
     monkeypatch.setattr(mail, "INSTALL_TREES", (str(tmp_path / "home" / "skills"),))
-    assert mail.main(["manifest"]) == 0
-    sums = capsys.readouterr().out
     release = share / "private" / "guides" / "cross-pc-messages" / f"v{mail.VERSION}"
     release.mkdir(parents=True)
-    (release / "SHA256SUMS").write_text(sums, encoding="utf-8")
+    with pytest.raises(SystemExit):
+        mail.main(["verify"])  # no manifest yet
+    assert mail.main(["manifest", str(installed)]) == 0  # the release manifest comes from an installed copy
+    (release / "SHA256SUMS").write_text(capsys.readouterr().out, encoding="utf-8")
     assert mail.main(["verify"]) == 0
-    assert capsys.readouterr().out.count(f"same v{mail.VERSION}") == 2
-    (installed / "SKILL.md").write_text("edited\n", encoding="utf-8")
+    out = capsys.readouterr().out
+    assert f"same v{mail.VERSION} (non-Markdown files)  source" in out and f"same v{mail.VERSION}  {installed}" in out
+    (installed / "scripts" / "cross_pc_mail.py").write_text("print(2)\n", encoding="utf-8")
     assert mail.main(["verify"]) == 1
-    assert "DRIFT" in capsys.readouterr().out
+    assert f"DRIFT v{mail.VERSION}  {installed}  scripts/cross_pc_mail.py" in capsys.readouterr().out
+
+
+def test_status_skips_folders_without_readme(share, capsys):
+    (share / "beta-to-alpha" / "ssh").mkdir()
+    (share / "beta-to-alpha" / "ssh" / "beta.pub").write_text("ssh-ed25519 AAAA example\n", encoding="utf-8")
+    mail.main(["status", "--json", "--since", "0"])
+    assert json.loads(capsys.readouterr().out) == []
 
 
 def test_unknown_host_exits(share, monkeypatch):

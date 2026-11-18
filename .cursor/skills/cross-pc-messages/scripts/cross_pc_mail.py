@@ -147,10 +147,11 @@ def ignored(p: Path) -> bool:
 
 
 def items(folder: Path) -> list[Path]:
-    """Top-level messages: package folders and single notes."""
+    """Top-level messages: package folders (they have a README.md) and single notes."""
     if not folder.is_dir():
         return []
-    return sorted(p for p in folder.iterdir() if not ignored(p) and (p.is_dir() or p.suffix == ".md"))
+    return sorted(p for p in folder.iterdir()
+                  if not ignored(p) and ((p.is_dir() and (p / "README.md").is_file()) or p.suffix == ".md"))
 
 
 def written(p: Path) -> float:
@@ -317,7 +318,8 @@ def cmd_new(args) -> int:
         (target / "README.md").write_text(text, encoding="utf-8")
         target = target / "README.md"
     print(target)
-    print("Fill in every <...> placeholder and list item, then run `check` until it prints clean.", file=sys.stderr)
+    if not args.from_file:
+        print("Fill in every <...> placeholder and list item, then run `check` until it prints clean.", file=sys.stderr)
     return 0
 
 
@@ -339,7 +341,7 @@ def cmd_reply(args) -> int:
     link = f"../{inbox.name}/{original.name}" + ("/README.md" if original.is_dir() else "")
     text = HEADER.format(title=f"{c['host'].upper()} → {args.to.upper()}: {args.kind} to {base}",
                          sender=f"agent on {c['host']}", receiver=f"agent on {args.to}",
-                         reply=f"{args.to}-to-{c['host']}/ as {base}-<kind>.md")
+                         reply=f"{args.to}-to-{c['host']}/{base}-<kind>.md")
     text = text.replace("- **Purpose:**", f"- **Replies to:** [`{inbox.name}/{original.name}`]({link})\n- **Purpose:**")
     text += "\n## Answer\n\n"
     target.write_text(text, encoding="utf-8")
@@ -406,10 +408,21 @@ def skill_files(skill_dir: Path) -> dict[str, str]:
 
 
 def cmd_manifest(args) -> int:
-    """Print SHA256SUMS for this skill copy. Writes nothing; publishing a release is a reviewed step."""
-    for rel, digest in skill_files(SKILL_DIR).items():
+    """Print SHA256SUMS for a skill copy (default: this one). Writes nothing.
+
+    Build a release manifest from an INSTALLED copy: the installer rewrites Markdown, so a repo copy never matches.
+    """
+    d = norm(args.dir) if args.dir else SKILL_DIR
+    if not (d / "SKILL.md").is_file():
+        sys.exit(f"{d} is not a skill directory (no SKILL.md).")
+    for rel, digest in skill_files(d).items():
         print(f"{digest}  {rel}")
     return 0
+
+
+def installed_dirs() -> list[Path]:
+    """Existing installed copies of this skill, one per global skill tree."""
+    return [norm(t) / SKILL_DIR.name for t in INSTALL_TREES if (norm(t) / SKILL_DIR.name).is_dir()]
 
 
 def cmd_verify(args) -> int:
@@ -419,24 +432,31 @@ def cmd_verify(args) -> int:
     if not versions:
         sys.exit(f"No release manifest in {releases} (expected v<N>/SHA256SUMS).")
     n, rel_dir = versions[-1]
+    if not (rel_dir / "SHA256SUMS").is_file():
+        sys.exit(f"{rel_dir} has no SHA256SUMS yet.")
     want = {}
     for line in (rel_dir / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         if line.strip():
             digest, rel = line.split(None, 1)
             want[rel.strip()] = digest
-    copies = {"running": SKILL_DIR}
-    for tree in INSTALL_TREES:
-        d = norm(tree) / SKILL_DIR.name
-        if d.is_dir() and d.resolve() != SKILL_DIR:
-            copies[str(d)] = d
+    installed = installed_dirs()
+    copies = [(str(d), d, False) for d in installed]
+    if SKILL_DIR not in {d.resolve() for d in installed}:
+        copies.insert(0, (f"source {SKILL_DIR}", SKILL_DIR, True))  # not installed: Markdown differs by design
     drift = False
     if VERSION != str(n):
         print(f"running script says v{VERSION}, newest release is v{n}")
         drift = True
-    for label, d in copies.items():
+    if not installed:
+        print("no installed copy in " + ", ".join(INSTALL_TREES))
+        drift = True
+    for label, d, source in copies:
         have = skill_files(d)
-        bad = sorted(r for r in want if have.get(r) != want[r]) + sorted(r for r in have if r not in want)
-        print(f"{'same' if not bad else 'DRIFT'} v{n}  {label}" + ("" if not bad else "  " + ", ".join(bad)))
+        keys = [r for r in want if not (source and r.endswith(".md"))]
+        bad = sorted(r for r in keys if have.get(r) != want[r])
+        bad += sorted(r for r in have if r not in want and not (source and r.endswith(".md")))
+        scope = " (non-Markdown files)" if source else ""
+        print(f"{'same' if not bad else 'DRIFT'} v{n}{scope}  {label}" + ("" if not bad else "  " + ", ".join(bad)))
         drift |= bool(bad)
     return 1 if drift else 0
 
@@ -481,7 +501,8 @@ def main(argv=None) -> int:
     p.add_argument("--interval", type=float, default=20.0)
     p = sub.add_parser("check")
     p.add_argument("paths", nargs="+")
-    sub.add_parser("manifest", help="print SHA256SUMS for this skill copy (writes nothing)")
+    p = sub.add_parser("manifest", help="print SHA256SUMS for a skill copy (writes nothing)")
+    p.add_argument("dir", nargs="?", help="skill directory, normally an installed copy (default: this one)")
     sub.add_parser("verify", help="compare running and installed copies with the share's newest v<N>/SHA256SUMS")
     args = ap.parse_args(argv)
     return {"whoami": cmd_whoami, "status": cmd_status, "new": cmd_new, "reply": cmd_reply,

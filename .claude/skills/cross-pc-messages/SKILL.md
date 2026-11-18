@@ -16,7 +16,7 @@ A synced folder is a slow but durable channel between PCs: every file you add ap
 This skill adds the routine and a helper. Read that file first, every session.
 
 ```bash
-M=~/.claude/skills/cross-pc-messages/scripts/cross_pc_mail.py   # resolve from this skill's directory
+M="<this skill's directory>/scripts/cross_pc_mail.py"   # e.g. under ~/.claude/skills or ~/.agents/skills
 python $M whoami            # share root, this host id, peers, incoming/outgoing folders
 python $M status            # threads changed in 14 days: "your turn" / "waiting on <peer>" (--since 0 = all)
 ```
@@ -98,10 +98,13 @@ commit, and the share holds its manifest at `private/guides/cross-pc-messages/v<
 `RELEASE.md`). `VERSION` in the script equals `<N>`, and a published `v<N>/` is never edited.
 
 - `python $M whoami --json` reports `version` and the script's `sha256`.
-- `python $M verify` compares the running copy and every installed copy (`~/.claude`, `~/.agents`,
-  `~/.gemini/config`, `~/.gemini/antigravity-cli` skill trees) with the newest manifest. It prints `same v<N>`
-  per copy, or the differing files, and exits 1 on drift.
-- `python $M manifest` prints `SHA256SUMS` for a copy. Publishing it into the share is a reviewed release step.
+- `python $M verify` compares every installed copy (`~/.claude`, `~/.agents`, `~/.gemini/config`,
+  `~/.gemini/antigravity-cli` skill trees; absent trees are skipped) with the newest manifest. It prints
+  `same v<N>` per copy, or the differing files, and exits 1 on drift. A running copy outside those trees is
+  labelled `source`, and only its non-Markdown files are compared: the installer rewrites Markdown.
+- `python $M manifest <installed skill dir>` prints `SHA256SUMS`. Build the release manifest from an
+  **installed** copy, never from the repo, because the installed bundle differs in its Markdown files.
+  Publishing it into the share is a reviewed release step.
 - Install or update with the framework's `scripts/agent_setup.py`: plan → user review → apply → check.
   Never hand-copy into skill folders.
 
