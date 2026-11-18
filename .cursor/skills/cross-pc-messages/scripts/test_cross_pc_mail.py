@@ -174,7 +174,8 @@ def test_check_flags_secrets_without_echoing_them(tmp_path, capsys):
     secret = "ghp_" + "A" * 36
     f = tmp_path / "README.md"
     hf = "hf_" + "b" * 34
-    f.write_text(f"token: {secret}\n-----BEGIN OPENSSH PRIVATE KEY-----\nTOKEN=<from private/auth>\n"
+    key_header = "-----BEGIN " + "OPENSSH PRIVATE KEY-----"  # built at runtime so repo secret scans stay quiet
+    f.write_text(f"token: {secret}\n{key_header}\nTOKEN=<from private/auth>\n"
                  f"{hf}\nAuthorization: Bearer {'c' * 32}\n- **Purpose:** <one sentence: why this message exists>\n- \n", encoding="utf-8")
     assert mail.main(["check", str(f)]) == 1
     out = capsys.readouterr().out
