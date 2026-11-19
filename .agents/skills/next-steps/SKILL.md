@@ -19,6 +19,7 @@ How this differs from neighbours:
 - `/step-by-step` carries out a plan to completion.
 - `/go` takes the recommended options and finishes the open items.
 - `/resume-task` recovers a thread from *earlier sessions*, then hands off here.
+- `/step-back` re-reads the ticket's criteria and scope, checks the diff against them, then hands off here.
 
 ## Pin the goal
 
