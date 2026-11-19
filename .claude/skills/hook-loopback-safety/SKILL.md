@@ -24,7 +24,7 @@ Do not emit one JSON object to every harness.
 - Cursor command hooks require `permission` of `allow`, `deny`, or `ask`. An empty object is an invalid response, and Cursor fail-closes the tool. Advisory defer is `ask`. An advisory hook never emits `allow`.
 - Claude Code `-p` treats `permissionDecision: "defer"` as pause-and-exit. Advisory defer emits `{}` so native permissions still run. `deny` and `ask` stay in `hookSpecificOutput`.
 - Claude Code Mode: a `PreToolUse` hook refuses the call, even with `onFailure` unset, if it can't start, is killed, exits 126, 127 or above 128, returns invalid output, or times out. Set `"onFailure": "continue"` only on advisory hooks.
-- Claude Code Mode: `UserPromptSubmit` hooks also run on output from code running in the background, with `source: "poll_event"`. A hook that can block must let that source through, or Claude gets the block reason instead of the output.
+- Claude Code Mode: to check or redact what code returns, use a `PostToolUse` hook matching `REPL`. Read `tool_response` and return a changed copy as `updatedToolOutput`. From v2.1.328, `UserPromptSubmit` hooks don't receive code output. Before that, they received background code output with `source: "poll_event"`, and a blocking hook had to let that source through.
 
 Detect Cursor from its event name (`preToolUse`, `beforeShellExecution`) or from `conversation_id` / `generation_id`. A top-level `command` without `tool_input` is a Cursor shell event. Claude pre-tool events use `PreToolUse`.
 
