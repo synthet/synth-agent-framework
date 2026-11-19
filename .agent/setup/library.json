@@ -498,6 +498,13 @@
       "projects": []
     },
     {
+      "id": "decide-with-agents",
+      "source": ".claude/skills/decide-with-agents",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "agent-flow",
       "source": ".claude/skills/agent-flow",
       "pack": "global",

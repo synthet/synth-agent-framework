@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-18. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-19. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -37,6 +37,7 @@ commands or edit code/config as part of its procedure.
 | rust-testing | Cargo/nextest unit tests beside modules | L2 | 2026-08-14 |
 | threat-modeling-agentic-tools | Threat-model MCP/tool abuse and injection | L1 | 2026-07-01 |
 | use-jev | Delegate pending decisions, blocked steps and triage items to Jev in one batched call; act on confident low-risk picks, hand back the rest | L2 | 2026-11-01 |
+| decide-with-agents | Settle decisions, research questions and plan approvals: sub-agents chosen by task complexity (Fable, Opus, Sonnet), checking their claims, a final Jev call and a provenance receipt | L2 | 2026-11-19 |
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only | L2 | 2026-11-07 |
 | validate-implementation | Per-AC Verified/Failed/Unknown verdicts with evidence (**compiled harness**) | L2 | 2026-07-19 |
