@@ -470,6 +470,13 @@
       "projects": []
     },
     {
+      "id": "step-back",
+      "source": ".claude/skills/step-back",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "ship-pr",
       "source": ".claude/skills/ship-pr",
       "pack": "global",

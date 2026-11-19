@@ -23,6 +23,7 @@ The script gathers the evidence cheaply. Your job is to reconcile it and state t
 How this differs from neighbours:
 - `/next-steps` reports status for the work *in this conversation*.
 - `/step-by-step` executes a plan.
+- `/step-back` checks the current diff against the current ticket's criteria and scope.
 - `/resume-task` recovers a thread from *earlier sessions, possibly in other tools*, then usually hands off to one of those two.
 
 ## 1. Which thread?

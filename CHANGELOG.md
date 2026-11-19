@@ -8,6 +8,10 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `/step-back` skill: mid-task check against the contract. It takes the goal, acceptance criteria and
+  scope from the agent-flow ticket, spec, backlog item or pinned goal, and gives each criterion a
+  Verified, Failed or Unknown verdict with evidence. It maps every change back to a criterion and flags
+  drift outside `scope_paths`, then re-plans through `next-steps`.
 - `decide-with-agents` skill: settles a decision, research question or plan approval by investigation. It runs independent sub-agents with the model chosen by task complexity (Fable for decisions and reviews, Opus for multi-file analysis, Sonnet for narrow facts), checks what they claim, lets Jev make the final call in one batched request, and writes a provenance receipt. It links to `use-jev` for Jev's thresholds and hard limits.
 - agent-flow skills in the global tier: `agent-flow`, `flow-next`, `flow-work`, `flow-complete`, `flow-plan`, `flow-review`, `flow-status`, `flow-land` and `flow-loop`. They apply only in projects with an `.agent-flow/` folder.
 - `/ship-pr` skill: takes one PR from open to merged. It fixes CI failures at the root cause, runs the
