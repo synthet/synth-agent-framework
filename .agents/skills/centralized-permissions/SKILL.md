@@ -153,6 +153,6 @@ Claude writes JavaScript that the `REPL` tool runs, and that one piece of code c
 - Each call inside the code still goes through the `deny`/`ask` rules and the `PreToolUse` hooks under its own tool name, so a `Bash|PowerShell` matcher still sees the shell calls. It never sees the JavaScript. To screen the code itself, match `REPL` and read `tool_input.code`.
 - In auto mode the classifier reviews each piece of code, not each call, and cannot see values computed at run time (a path taken from search output). Keep hard limits in deterministic deny rules, never in the classifier.
 - A `PreToolUse` hook that fails or times out refuses the call, even with `onFailure` unset (`the hook failed`, `the hook did not finish`). Once code has run in the session, a timeout refuses any later call too. Keep the gate's own deadline (8 s) under the hook `timeout`.
-- The docs describe `PreToolUse` only. They don't say whether this gate's `PermissionRequest` hook fires for calls made from code. After the first Code Mode session, check `audit --since 1d` before you rely on it.
+- The Code Mode page covers `PreToolUse` and `PostToolUse` hooks, not `PermissionRequest`, so it doesn't say whether this gate's hook fires for calls made from code. After the first Code Mode session, check `audit --since 1d` before you rely on it.
 
 Source: Claude Code docs, "Run tool calls from code with Code Mode".
