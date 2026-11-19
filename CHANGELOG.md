@@ -8,6 +8,7 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `decide-with-agents` skill: settles a decision, research question or plan approval by investigation. It runs independent sub-agents with the model chosen by task complexity (Fable for decisions and reviews, Opus for multi-file analysis, Sonnet for narrow facts), checks what they claim, lets Jev make the final call in one batched request, and writes a provenance receipt. It links to `use-jev` for Jev's thresholds and hard limits.
 - agent-flow skills in the global tier: `agent-flow`, `flow-next`, `flow-work`, `flow-complete`, `flow-plan`, `flow-review`, `flow-status`, `flow-land` and `flow-loop`. They apply only in projects with an `.agent-flow/` folder.
 - `/ship-pr` skill: takes one PR from open to merged. It fixes CI failures at the root cause, runs the
   steps CI skipped after a failure, waits for green on the exact head commit, then merges and
