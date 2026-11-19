@@ -491,6 +491,20 @@
       "projects": []
     },
     {
+      "id": "agent-mailbox",
+      "source": ".claude/skills/agent-mailbox",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "mail-dispatch",
+      "source": ".claude/skills/mail-dispatch",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
       "pack": "global",
