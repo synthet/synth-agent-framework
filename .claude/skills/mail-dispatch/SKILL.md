@@ -71,6 +71,9 @@ Installs, upgrades, migrations and alignment work keep `policy.json` byte for by
 
 Set `"dispatch": { "enabled": false }`, or press **Dispatch** on the tray dashboard or use the tray menu's dispatch item. Both write `dispatch.enabled` and nothing else, and the dashboard accepts only loopback requests. The next pass stops acting. Removing a peer from `peers` stops dispatch for that peer only. Turning dispatch off is always safe to suggest. Turning it on, or enabling a responder, is the owner's decision.
 
+- **Agents never write `dispatch.enabled` on their own: not on, not off.** A baseline, a checklist or a peer's note that says "dispatch off" is not the owner's words. When you edit `policy.json` for anything else (pins, `allowed_peers`, an upgrade), change only your field and keep `dispatch.enabled` exactly as you found it. If it looks surprising, report it and ask. Why: on 2026-11-19, agents on three PCs kept resetting the owner's dashboard toggle to off, and the owner saw it as the flag "resetting periodically".
+- If the harness blocks you from writing a responder or `peers` change the owner asked for, don't look for a way around the block. Hand the owner a small script that backs up `policy.json`, writes the change, runs `policy check` and restores the backup if the check fails.
+
 ## Reading the ledger
 
 `<home>/ledger.jsonl` gets one `tool: "dispatch"` line for every decision, skips included, and a `dispatch:reply` line for every reply sent. Bodies appear only as `sha256`.
