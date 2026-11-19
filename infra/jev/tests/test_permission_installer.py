@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from jev_engineering.permission.grammar import Policy
-from jev_engineering.permission.installer import apply_all, plan_all, rollback_permissions
+from jev_engineering.permission.installer import apply_all, plan_all, plan_antigravity_cli, rollback_permissions
+from jev_engineering.permission.render import render_antigravity
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -117,3 +118,26 @@ def test_apply_and_rollback(mock_env):
     restored = rollback_permissions(receipt_file)
     assert restored > 0
     assert claude_file.read_text(encoding="utf-8") == claude_orig
+
+
+def test_apply_keeps_non_ascii_text(mock_env):
+    home, projects, policy, root = mock_env
+    root.mkdir(parents=True)
+    claude_file = home / ".claude" / "settings.json"
+    data = json.loads(claude_file.read_text(encoding="utf-8"))
+    data["autoMode"] = {"environment": ["**Organization**: None configured — personal account"]}
+    claude_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    apply_all(home=home, projects_root=projects, policy=policy, root=root)
+
+    text = claude_file.read_text(encoding="utf-8")
+    assert "None configured — personal account" in text
+    assert "\\u2014" not in text
+
+
+def test_antigravity_summary_matches_rendered_flag(mock_env):
+    home, _, policy, _ = mock_env
+    rendered = render_antigravity(policy)["allowNonWorkspaceAccess"]
+    summary = plan_antigravity_cli(home, policy).summary
+    assert f"allowNonWorkspaceAccess={str(rendered).lower()}" in summary
+    assert f"allowNonWorkspaceAccess={str(not rendered).lower()}" not in summary

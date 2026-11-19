@@ -128,7 +128,7 @@ def plan_claude_global(home: Path, policy: Policy) -> FilePlan:
     ]
     hooks["PermissionRequest"] = [gate_entry, *other_entries]
 
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if before.strip() != after.strip() else "unchanged"
     summary = "Set defaultMode=auto, apply T0/T1/T2 lists, attach PermissionRequest gate hook"
     return FilePlan(path, "global", "claude", action if path.is_file() else "create", before, after, summary)
@@ -189,7 +189,7 @@ def plan_codex_hooks(home: Path) -> FilePlan:
     hooks = data.setdefault("hooks", {})
     hook_cmd = "uv run --project D:\\Projects\\_agent-infra\\jev python -m jev_engineering.permission hook --harness codex"
     hooks["PermissionRequest"] = [{"type": "command", "command": hook_cmd, "timeout": 12}]
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if path.is_file() and before.strip() != after.strip() else ("create" if not path.is_file() else "unchanged")
     summary = "Attach PermissionRequest hook to Jev gate"
     return FilePlan(path, "global", "codex", action, before, after, summary)
@@ -211,7 +211,7 @@ def plan_cursor_cli(home: Path, policy: Policy) -> FilePlan:
     perms = data.setdefault("permissions", {})
     perms["allow"] = rendered["allow"]
     perms["deny"] = rendered["deny"]
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if before.strip() != after.strip() else "unchanged"
     summary = "Set approvalMode=auto-review, replace allowlist with T2, populate deny"
     return FilePlan(path, "global", "cursor", action, before, after, summary)
@@ -226,7 +226,7 @@ def plan_cursor_permissions(home: Path, policy: Policy) -> FilePlan:
         data = {}
     rendered = render_cursor(policy)
     data["autoRun"] = rendered["autoRun"]
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if path.is_file() and before.strip() != after.strip() else ("create" if not path.is_file() else "unchanged")
     summary = "Set autoRun allow and block instructions matching policy T2/T1"
     return FilePlan(path, "global", "cursor", action, before, after, summary)
@@ -243,7 +243,7 @@ def plan_cursor_hooks(home: Path) -> FilePlan:
     hooks = data.setdefault("hooks", {})
     hooks["beforeShellExecution"] = [{"command": hook_cmd, "timeout": 12, "failClosed": True}]
     hooks["beforeMCPExecution"] = [{"command": hook_cmd, "timeout": 12, "failClosed": True}]
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if path.is_file() and before.strip() != after.strip() else ("create" if not path.is_file() else "unchanged")
     summary = "Set beforeShellExecution and beforeMCPExecution hooks to Jev gate (failClosed=true)"
     return FilePlan(path, "global", "cursor", action, before, after, summary)
@@ -310,9 +310,10 @@ def plan_antigravity_cli(home: Path, policy: Policy) -> FilePlan:
     perms["ask"] = rendered["permissions"]["ask"]
     perms["deny"] = rendered["permissions"]["deny"]
 
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if before.strip() != after.strip() else "unchanged"
-    summary = "Set agentMode=auto, allowNonWorkspaceAccess=false, remove home from trustedWorkspaces, apply T0/T1/T2 lists"
+    flag = str(rendered["allowNonWorkspaceAccess"]).lower()
+    summary = f"Set agentMode=auto, allowNonWorkspaceAccess={flag}, remove home from trustedWorkspaces, apply T0/T1/T2 lists"
     return FilePlan(path, "global", "antigravity", action, before, after, summary)
 
 
@@ -353,7 +354,7 @@ def plan_antigravity_ide(home: Path, policy: Policy) -> FilePlan:
             else:
                 fixed_deny.append(d)
         grants["deny"] = fixed_deny
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if before.strip() != after.strip() else "unchanged"
     summary = f"Prune globalPermissionGrants.allow ({len(old_allows)} -> {len(new_allows)}, dropping npm install and raw cmd)"
     return FilePlan(path, "ide", "antigravity", action, before, after, summary)
@@ -387,7 +388,7 @@ def plan_antigravity_hooks(home: Path) -> FilePlan:
                 "hooks": [{"type": "command", "command": hook_cmd, "timeout": 12}],
             })
 
-    after = json.dumps(data, indent=2) + "\n"
+    after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     action = "modify" if path.is_file() and before.strip() != after.strip() else ("create" if not path.is_file() else "unchanged")
     summary = "Set PreToolUse hook for run_command|ask_permission to Jev gate"
     return FilePlan(path, "global", "antigravity", action, before, after, summary)
@@ -448,7 +449,7 @@ def plan_project_settings(projects_root: Path, policy: Policy) -> list[FilePlan]
             if new_allow != old_allow:
                 perms["allow"] = new_allow
                 data["permissions"] = perms
-                after = json.dumps(data, indent=2) + "\n"
+                after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
                 plans.append(FilePlan(
                     local_path, "project", "claude", "modify", raw, after,
                     f"Prune {repo.name} local allows ({len(old_allow)} -> {len(new_allow)}, removing T1 and scratchpad commands)",
@@ -468,7 +469,7 @@ def plan_project_settings(projects_root: Path, policy: Policy) -> list[FilePlan]
             if new_allow != old_allow:
                 perms["allow"] = new_allow
                 data["permissions"] = perms
-                after = json.dumps(data, indent=2) + "\n"
+                after = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
                 plans.append(FilePlan(
                     committed_path, "project", "claude", "modify", raw, after,
                     f"Remove T1 mutation entries from {repo.name} committed allowlist ({len(old_allow)} -> {len(new_allow)})",
