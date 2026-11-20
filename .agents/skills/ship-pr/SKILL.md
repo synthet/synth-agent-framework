@@ -49,6 +49,11 @@ and passed,** even when the checks already look green. A new commit on the PR re
 
    The exit status is the result, so nothing may follow the watch. A trailing `echo` or a pipe to
    `tail` reports success whatever happened.
+
+   If `gh pr checks` or the check-runs API returns HTTP 403, the token lacks checks access. Watch
+   through the Actions runs API instead: `gh run list --commit <sha>`, then
+   `gh run watch <id> --exit-status > /dev/null` for each run. Say in the report that this view can't
+   see statuses from outside Actions.
 3. **Read the results for the exact head commit.**
    - **An empty conclusion is not a pass.** A check with no result is still running.
    - **No checks at all is not green.** Find out which of these it is:

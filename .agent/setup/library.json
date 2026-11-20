@@ -1039,6 +1039,16 @@
       "relative": ".gemini/antigravity-cli/skills/release-bump/SKILL.md",
       "sha256": "8bca2af12a1564e1c392c26356cc9873540568fa581f18a8ac5aef6e8ab36ff3",
       "skill": "release-bump"
+    },
+    {
+      "relative": ".claude/skills/ship-pr/SKILL.md",
+      "sha256": "011c54ad09e3c5abaa449edbfa552a9428f62a5c338fc81fe04ade196bc2792b",
+      "skill": "ship-pr"
+    },
+    {
+      "relative": ".agents/skills/ship-pr/SKILL.md",
+      "sha256": "011c54ad09e3c5abaa449edbfa552a9428f62a5c338fc81fe04ade196bc2792b",
+      "skill": "ship-pr"
     }
   ],
   "reviewed_resource_adoptions": [

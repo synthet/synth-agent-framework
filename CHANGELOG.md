@@ -8,6 +8,9 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `/ship-pr`: when `gh pr checks` returns HTTP 403, watch through the Actions runs API instead. This
+  fallback lived only in hand-edited installed copies; those copies are now reviewed adoptions in
+  `library.json`, so `agent_setup.py` can update them to the current skill.
 - `/ship-pr <n> --no-ci`: for a repository whose CI exists but can't run (for example, Actions stopped
   at a spending limit). It merges only when no failing check ran the project's code, after the one
   infrastructure rerun and a local run on a clean checkout of the head commit, and it reports the
