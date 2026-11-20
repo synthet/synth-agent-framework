@@ -10,7 +10,7 @@
     "`git worktree add --detach <tmp> <sha>`",
     "If the project documents none, stop and report",
     "**Every command must exit 0.**",
-    "the step 2a local run, passed on;"
+    "the step 2a or 2b local run, passed on;"
   ],
   "must_not_contain": [
     "**No checks at all is not green.** Stop and report."
