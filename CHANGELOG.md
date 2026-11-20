@@ -8,6 +8,10 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `/ship-pr <n> --no-ci`: for a repository whose CI exists but can't run (for example, Actions stopped
+  at a spending limit). It merges only when no failing check ran the project's code, after the one
+  infrastructure rerun and a local run on a clean checkout of the head commit, and it reports the
+  merge as made without CI. The option is typed per PR and never inferred.
 - `/step-back` skill: mid-task check against the contract. It takes the goal, acceptance criteria and
   scope from the agent-flow ticket, spec, backlog item or pinned goal, and gives each criterion a
   Verified, Failed or Unknown verdict with evidence. It maps every change back to a criterion and flags
