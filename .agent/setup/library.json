@@ -491,6 +491,13 @@
       "projects": []
     },
     {
+      "id": "fix-it",
+      "source": ".claude/skills/fix-it",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "bg-status",
       "source": ".claude/skills/bg-status",
       "pack": "global",

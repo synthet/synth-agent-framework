@@ -18,6 +18,7 @@ How this differs from neighbours:
 - `/next-steps` reports status and one next step for the work *in this conversation*.
 - `/step-by-step` carries out a plan to completion.
 - `/go` takes the recommended options and finishes the open items.
+- `/fix-it` fixes the one problem a report named, then verifies it from the user's side.
 - `/resume-task` recovers a thread from *earlier sessions*, then hands off here.
 - `/step-back` re-reads the ticket's criteria and scope, checks the diff against them, then hands off here.
 

@@ -19,6 +19,7 @@ How this differs from neighbours:
 - `/implement` carries out an approved plan in a single pass.
 - `/next-steps` reports what's finished and what's left.
 - `/go` decides open questions and finishes the items without asking.
+- `/fix-it` fixes the one problem the latest report named.
 
 ## 1. Find the plan
 

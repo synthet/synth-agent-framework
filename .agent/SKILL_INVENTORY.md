@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-19. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-21. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -41,6 +41,7 @@ commands or edit code/config as part of its procedure.
 | use-jev | Delegate pending decisions, blocked steps and triage items to Jev in one batched call; act on confident low-risk picks, hand back the rest | L2 | 2026-11-01 |
 | decide-with-agents | Settle decisions, research questions and plan approvals: sub-agents chosen by task complexity (Fable, Opus, Sonnet), checking their claims, a final Jev call and a provenance receipt | L2 | 2026-11-19 |
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
+| fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
 | step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |
 | merge-pr | Merge one PR without fixing anything: CI already green on the exact head commit; Actions could not start (billing, spending limit, minutes), with the workflow steps replayed locally; a mix of the two; or no CI at all, with the declared checks run locally. Merge pinned to the head commit. User-typed only | L2 | 2026-11-21 |
