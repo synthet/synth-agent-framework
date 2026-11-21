@@ -22,6 +22,7 @@ question.
 | Status / state enums | `<path to the enum definition>` |
 | Domain vocabulary | `<path to a terminology doc>` |
 | Build / test / lint commands | [`../AGENTS.md`](../AGENTS.md) |
+| Local install (deploy) details | `.agent/deploy.json` in each project, when present; format in [`.claude/skills/deploy/references/recipe.md`](../.claude/skills/deploy/references/recipe.md) |
 | Codex project configuration | [`.codex/config.toml`](../.codex/config.toml) and [`.codex/README.md`](../.codex/README.md) |
 | Optional file-search MCP (fff) | [fff repo](https://github.com/dmtrKovalenko/fff); template keys `fff-mcp` / `${MCP_PREFIX}-fff` in [`.cursor/mcp.example.json`](../.cursor/mcp.example.json) |
 | CLI tooling skills spec | [`.agent/cli-tools-skills-spec.md`](../.agent/cli-tools-skills-spec.md) |

@@ -498,6 +498,20 @@
       "projects": []
     },
     {
+      "id": "build",
+      "source": ".claude/skills/build",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "deploy",
+      "source": ".claude/skills/deploy",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "bg-status",
       "source": ".claude/skills/bg-status",
       "pack": "global",
