@@ -1,31 +1,33 @@
 ---
 name: merge-pr
-description: "Merge one GitHub PR whose CI cannot run: Actions cannot start for reasons unrelated to the change (billing or spending limit, exhausted minutes, runner outage), or the repository has no CI at all. Prove which, run the workflow's steps (or, with no CI, the project's declared checks) locally in a clean worktree on the exact head commit, then merge pinned to that commit. Runs only when the user types /merge-pr, with a PR number, URL or branch; with none it uses the current branch's PR. For CI that ran and failed, use /ship-pr."
-capability: "Merge a pull request on local CI evidence when GitHub Actions cannot start or the repository has no CI, within fixed limits."
+description: "Merge one GitHub PR: when its CI already passed on the exact head commit, merge it after the same re-checks; when CI cannot run (Actions cannot start for reasons unrelated to the change, such as billing, spending limit, exhausted minutes or a runner outage, or the repository has no CI at all), prove which, run the workflow's steps (or, with no CI, the project's declared checks) locally in a clean worktree on that commit, then merge pinned to it. Runs only when the user types /merge-pr, with a PR number, URL or branch; with none it uses the current branch's PR. For CI that ran and failed, use /ship-pr."
+capability: "Merge a pull request whose CI passed on its head commit, or on local CI evidence when GitHub Actions cannot start or the repository has no CI, within fixed limits."
 side_effect_level: remote_write
 approval_required: true
 requires_tools: "git and gh; the commands in the repository's workflow files, or its declared build, lint and test commands when it has none."
-output_schema: "Why remote CI could not run (run ids and the annotation, or that the head commit has no workflows and no runs), a table of each local workflow step with its exit code, the merge commit, and anything left with the reason and a paste-ready command."
+output_schema: "Which case held (the green run ids; or why remote CI could not run, with run ids and the annotation, or that the head commit has no workflows and no runs), a table of each local workflow step with its exit code when one ran, the merge commit, and anything left with the reason and a paste-ready command."
 risk_class: high
 disable-model-invocation: true
 ---
 
 # Merge PR
 
-`/merge-pr` means: **merge this PR on local evidence, because GitHub can't run its CI**: its Actions
-can't start, or the repository has none. Typing it approves merging this PR and nothing else. It is not
+`/merge-pr` means: **merge this PR.** When its CI already passed on the head commit, that is the
+evidence. When GitHub can't run its CI (its Actions can't start, or the repository has none), the
+evidence is a local run. Typing it approves merging this PR and nothing else. It is not
 standing approval, and it never pushes fixes. Never run this skill on your own initiative.
 
 One PR per run. If the user names none, use the current branch's PR. If that's ambiguous, stop and ask.
 
 How this differs from `/ship-pr`: `/ship-pr` fixes CI failures and merges once CI is green. `/merge-pr`
-applies only when no CI job could start, including when the repository has no CI. `/ship-pr` can
-also merge a repository without CI, but when the user typed `/merge-pr` for one, handle it here; don't
+never fixes anything. It merges when CI is already green, or when no CI job could start, including when
+the repository has no CI. `/ship-pr` can also merge in those cases, but when the user typed `/merge-pr`,
+handle it here; don't
 send them to `/ship-pr`. A job that started and failed is a real failure: stop and point to `/ship-pr`.
 
 ## 1. Confirm the target
 
-Read `gh pr view <n> --json state,author,baseRefName,headRefName,headRefOid,isDraft,mergeable,reviewDecision,body`
+Read `gh pr view <n> --json state,author,baseRefName,headRefName,headRefOid,isDraft,mergeable,mergeStateStatus,reviewDecision,body`
 and `gh repo view --json visibility,nameWithOwner`.
 
 - Already merged: report it and stop.
@@ -37,13 +39,25 @@ and `gh repo view --json visibility,nameWithOwner`.
   If it's still in review, stop; this skill never stands in for a review.
 - Record the head commit `<sha>`. Every later step is about that commit.
 
-## 2. Prove CI could not run
+## 2. Find out which case holds
 
 List the runs for the head commit: `gh run list --commit <sha> --json databaseId,name,status,conclusion`.
 `gh pr checks` and the check-runs API often return HTTP 403 with this token; use the runs API. Then
 list the workflows on that commit: `git ls-tree -r --name-only <sha> -- .github/workflows`.
 
-Exactly one of these two cases must hold.
+Exactly one of these three cases must hold.
+
+**CI already passed.** This case holds only when **all** of these are true:
+
+- at least one run exists for `<sha>`, every run is `completed`, and every run's conclusion is
+  `success` (`skipped` and `neutral` count as passing);
+- no check from outside Actions failed: the check-runs and status APIs for `<sha>` (below) show no
+  failing or pending entry. If that API returns 403, say in the report that checks outside Actions
+  could not be seen;
+- `mergeStateStatus` is not `BLOCKED`.
+
+Quote the green run ids in the report, skip step 3, and go to step 4. A run on an older commit doesn't
+count: the runs must be for `<sha>`.
 
 **Actions could not start.** This case holds only when **all** of these are true:
 
@@ -68,8 +82,11 @@ real failure for `/ship-pr`. Don't re-run jobs repeatedly: one rerun to confirm 
 
 Quote these results in the report in place of the annotation.
 
+If some runs passed and the rest never started a job, the passed runs count as evidence: replay only the
+workflows whose jobs didn't start, in step 3.
+
 Anything else means stop and report: workflows exist but no run appeared, runs are still pending, or a
-job ran a step.
+job ran a step and failed.
 
 ## 3. Run CI locally on the exact commit
 
@@ -116,7 +133,8 @@ Immediately before merging, re-read the PR and confirm:
 
 - the head is still `<sha>`, with no new commits;
 - it is mergeable with no conflicts, and no review has changed;
-- the runs for `<sha>` still show only the not-started cause, or, with no CI, still none.
+- the runs for `<sha>` still show the case from step 2: all green, only the not-started cause, or, with
+  no CI, still none.
 
 Use the merge method the repository's recent PRs used, pinned to the checked commit:
 
@@ -130,14 +148,20 @@ merge succeeded. If it fails, check `gh pr view <n> --json state,mergeCommit` be
 
 ## 5. Verify and clean up
 
-- Confirm the PR shows as merged and record the merge commit. Note that the base branch's CI will also
-  be blocked, or that there is none; say so rather than waiting for it.
+- Confirm the PR shows as merged and record the merge commit. With green CI, the base branch's run on
+  the merge commit is the usual follow-up. Otherwise note that the base branch's CI will also be
+  blocked, or that there is none; say so rather than waiting for it.
 - Return a shared checkout to its default branch, and fast-forward it only if it's clean.
 - Remove the worktree this run created with `git worktree remove <path>`, but only if no step created
   links inside it (`node_modules` from a package install, junctions). Otherwise leave it and give the
   user the steps: remove the links first, then the worktree.
 
 ## Report
+
+With green CI, the first line reads: `**PR #<n>** merged as <merge sha>. CI passed on <sha> (runs <ids>).`
+No table is needed.
+
+Otherwise:
 
 ```markdown
 **PR #<n>** merged as <merge sha> on local evidence. GitHub CI did not start: "<annotation>" (runs <ids>).
@@ -170,5 +194,5 @@ Leave these for the user, with a paste-ready command where one helps:
 ## When to stop
 
 Stop and report when a hook or deny rule blocks a command (**never reword a command to get past a
-block**), neither case in step 2 can be shown, a required step can't be reproduced locally, a local
+block**), none of the cases in step 2 can be shown, a required step can't be reproduced locally, a local
 step fails, or the PR's state changes under you. Stopping is a good result.
