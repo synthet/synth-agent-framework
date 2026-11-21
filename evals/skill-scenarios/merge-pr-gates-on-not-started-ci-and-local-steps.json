@@ -1,6 +1,6 @@
 {
   "id": "merge-pr-gates-on-not-started-ci-and-local-steps",
-  "description": "Protect /merge-pr's gate: it merges only when no CI job ran a step, after the workflow's own run: steps pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr.",
+  "description": "Protect /merge-pr's gate: it merges only when no CI job ran a step (Actions could not start) or the repository has no CI at all, after the workflow's own run: steps, or with no CI the project's declared checks, pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr, and a no-CI repository is handled here, not sent to /ship-pr.",
   "target_asset": ".claude/skills/merge-pr/SKILL.md",
   "linked_docs": [],
   "must_contain": [
@@ -11,7 +11,10 @@
     "If a **required** check can't be reproduced",
     "**Review sign-off still applies.**",
     "gh pr merge <n> --merge --delete-branch --match-head-commit <sha>",
-    "Merging when any CI job actually ran and failed, or while runs are still pending."
+    "Merging when any CI job actually ran and failed, or while runs are still pending.",
+    "**The repository has no CI.** This case holds only when **all** of these are true:",
+    "don't\nsend them to `/ship-pr`",
+    "a diff review alone isn't\nevidence for a merge"
   ],
   "must_not_contain": []
 }
