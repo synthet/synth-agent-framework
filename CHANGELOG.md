@@ -8,6 +8,20 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `/merge-pr` skill: merges one PR whose CI exists but cannot start (Actions billing, spending limit,
+  used-up minutes). It proves that no job ran a step, runs every workflow `run:` step in a clean
+  detached worktree on the head commit, requires the review sign-off, and merges pinned to that
+  commit. A job that ran and failed sends the PR back to `/ship-pr`. A repository with no CI at all
+  (no workflows, no runs, no outside checks on the head commit) is handled here too: it runs the
+  project's declared checks in that worktree instead of sending the user to `/ship-pr`. When CI already
+  passed on the head commit, `/merge-pr` merges after the same re-checks instead of sending the user to
+  `/ship-pr`.
+  In every case it reads check runs and commit statuses outside Actions and stops on a failing or
+  pending one, stops on `mergeStateStatus` `BLOCKED`, and does at most one infrastructure rerun
+  first. Unlike `/ship-pr`, it removes the fresh worktree it made when no step created links in it.
+  A mix of passed and not-started runs is its own case (only the not-started workflows are replayed);
+  "no CI" also requires the base branch to have no workflows and no checks; and every case waits for
+  runs to register after a fresh push.
 - `/ship-pr`: when `gh pr checks` returns HTTP 403, watch through the Actions runs API instead. This
   fallback lived only in hand-edited installed copies; those copies are now reviewed adoptions in
   `library.json`, so `agent_setup.py` can update them to the current skill.

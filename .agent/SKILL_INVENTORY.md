@@ -44,6 +44,7 @@ commands or edit code/config as part of its procedure.
 | fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
 | step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |
+| merge-pr | Merge one PR without fixing anything: CI already green on the exact head commit; Actions could not start (billing, spending limit, minutes), with the workflow steps replayed locally; a mix of the two; or no CI at all, with the declared checks run locally. Merge pinned to the head commit. User-typed only | L2 | 2026-11-21 |
 | validate-implementation | Per-AC Verified/Failed/Unknown verdicts with evidence (**compiled harness**) | L2 | 2026-07-19 |
 | verification-before-completion | Evidence-backed completion claims with fresh command proof (**compiled harness**) | L1 | 2026-11-04 |
 

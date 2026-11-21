@@ -484,6 +484,13 @@
       "projects": []
     },
     {
+      "id": "merge-pr",
+      "source": ".claude/skills/merge-pr",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "fix-it",
       "source": ".claude/skills/fix-it",
       "pack": "global",
