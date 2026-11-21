@@ -1,0 +1,17 @@
+{
+  "id": "merge-pr-gates-on-not-started-ci-and-local-steps",
+  "description": "Protect /merge-pr's gate: it merges only when no CI job ran a step, after the workflow's own run: steps pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr.",
+  "target_asset": ".claude/skills/merge-pr/SKILL.md",
+  "linked_docs": [],
+  "must_contain": [
+    "for every run, no job executed a step",
+    "If any job ran a step and failed, stop",
+    "git worktree add --detach <scratch>/merge-pr-<n> <sha>",
+    "**Never pipe or chain a check into anything that hides its exit code**",
+    "If a **required** check can't be reproduced",
+    "**Review sign-off still applies.**",
+    "gh pr merge <n> --merge --delete-branch --match-head-commit <sha>",
+    "Merging when any CI job actually ran and failed, or while runs are still pending."
+  ],
+  "must_not_contain": []
+}

@@ -484,6 +484,13 @@
       "projects": []
     },
     {
+      "id": "merge-pr",
+      "source": ".claude/skills/merge-pr",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "bg-status",
       "source": ".claude/skills/bg-status",
       "pack": "global",
