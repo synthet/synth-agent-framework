@@ -42,8 +42,11 @@
     "one outside this PR's branch",
     "- at least one run did not start (otherwise this is \"CI already passed\");",
     "replay only the workflows whose jobs didn't start;",
-    "before deciding",
-    "every run was skipped"
+    "before deciding\nany case",
+    "every run was skipped",
+    "- the same not-started cause failed a run on another recent commit outside this PR's branch;",
+    "replay only the workflows whose jobs didn't start, in step 3",
+    "the base branch's latest few commits have none either"
   ],
   "must_not_contain": []
 }
