@@ -19,6 +19,9 @@ All notable changes to this framework are documented here. The format follows
   In every case it reads check runs and commit statuses outside Actions and stops on a failing or
   pending one, stops on `mergeStateStatus` `BLOCKED`, and does at most one infrastructure rerun
   first. Unlike `/ship-pr`, it removes the fresh worktree it made when no step created links in it.
+  A mix of passed and not-started runs is its own case (only the not-started workflows are replayed);
+  "no CI" also requires the base branch to have no workflows and no checks; and every case waits for
+  runs to register after a fresh push.
 - `/ship-pr`: when `gh pr checks` returns HTTP 403, watch through the Actions runs API instead. This
   fallback lived only in hand-edited installed copies; those copies are now reviewed adoptions in
   `library.json`, so `agent_setup.py` can update them to the current skill.

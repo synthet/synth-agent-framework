@@ -54,12 +54,17 @@ that `gh run list` can't see. Any failing or pending entry that isn't one of the
 above stops the run. If those APIs return 403, say in the report that checks outside Actions could not
 be seen, and stop if branch protection or recent base commits show that such checks exist.
 
-Exactly one of these three cases must hold.
+**Wait for runs to register.** After a push in the last five minutes, wait that long before deciding
+any case: a workflow that hasn't queued yet is invisible, and the commit would read as green or as
+having no CI.
+
+Exactly one of these four cases must hold.
 
 **CI already passed.** This case holds only when **all** of these are true:
 
 - at least one run exists for `<sha>`, every run is `completed`, and every run's conclusion is
-  `success` (`skipped` and `neutral` count as passing);
+  `success` (`skipped` and `neutral` count as passing, but only next to at least one `success`: runs
+  that were all skipped don't count as passed);
 - no check from outside Actions failed: the check-runs and status APIs for `<sha>` (above) show no
   failing or pending entry;
 - `mergeStateStatus` is not `BLOCKED`.
@@ -88,16 +93,31 @@ real failure for `/ship-pr`.
 
 **The repository has no CI.** This case holds only when **all** of these are true:
 
-- `git ls-tree` lists nothing under `.github/workflows` for `<sha>`;
-- no run exists for `<sha>`. After a push in the last five minutes, wait that long before deciding;
+They must hold for the base branch as well as for the head commit.
+
+- `git ls-tree` lists nothing under `.github/workflows` for `<sha>`, and nothing for the base branch's
+  tip (`git ls-tree -r --name-only origin/<base> -- .github/workflows`). A PR that deletes the workflows
+  doesn't make the repository CI-free: that is "workflows exist but no run appeared", and it stops;
+- no run exists for `<sha>`;
 - no check from outside Actions exists either: `gh api repos/<owner>/<repo>/commits/<sha>/check-runs`
-  lists no check runs and `gh api repos/<owner>/<repo>/commits/<sha>/status` lists no statuses. If
-  that API returns 403, say in the report that checks outside Actions could not be seen.
+  lists no check runs and `gh api repos/<owner>/<repo>/commits/<sha>/status` lists no statuses, and
+  the base branch's latest few commits have none either. If that API returns 403, say in the report
+  that checks outside Actions could not be seen.
 
 Quote these results in the report in place of the annotation.
 
-If some runs passed and the rest never started a job, the passed runs count as evidence: replay only the
-workflows whose jobs didn't start, in step 3.
+**Some runs passed, the rest could not start.** This case holds only when **all** of these are true:
+
+- every run for `<sha>` is `completed`;
+- each run either passed (as in "CI already passed", with at least one `success`) or had no job execute
+  a step, with a not-started annotation (as in "Actions could not start");
+- the same not-started cause failed a run on another recent commit;
+- the one infrastructure rerun of the not-started runs was done first, as above, and they still didn't
+  start;
+- no check outside Actions failed or is pending, and `mergeStateStatus` is not `BLOCKED`.
+
+The passed runs count as evidence: replay only the workflows whose jobs didn't start, in step 3. Quote
+the passed run ids and the not-started annotation in the report.
 
 Anything else means stop and report: workflows exist but no run appeared, runs are still pending, or a
 job ran a step and failed.
@@ -148,8 +168,8 @@ Immediately before merging, re-read the PR and confirm:
 - the head is still `<sha>`, with no new commits;
 - it is mergeable with no conflicts, `mergeStateStatus` is not `BLOCKED`, and no review has changed;
 - the checks outside Actions still show nothing failing or pending;
-- the runs for `<sha>` still show the case from step 2: all green, only the not-started cause, or, with
-  no CI, still none.
+- the runs for `<sha>` still show the case from step 2: all green, only the not-started cause, the same
+  mix of passed and not-started runs, or, with no CI, still none.
 
 Use the merge method the repository's recent PRs used, pinned to the checked commit:
 
@@ -189,6 +209,10 @@ Otherwise:
 
 Not covered: <steps, or "none">
 ```
+
+With some runs passed and the rest not started, the first line reads: `**PR #<n>** merged as <merge sha>.
+CI passed on <sha> (runs <ids>); the rest did not start: "<annotation>" (runs <ids>).` The table lists
+only the replayed workflows' steps.
 
 With no CI, the first line reads: `**PR #<n>** merged as <merge sha> on local evidence. The repository
 has no CI: no workflows and no runs on <sha>.` The table lists the declared checks you ran.
