@@ -16,6 +16,9 @@ All notable changes to this framework are documented here. The format follows
   project's declared checks in that worktree instead of sending the user to `/ship-pr`. When CI already
   passed on the head commit, `/merge-pr` merges after the same re-checks instead of sending the user to
   `/ship-pr`.
+  In every case it reads check runs and commit statuses outside Actions and stops on a failing or
+  pending one, stops on `mergeStateStatus` `BLOCKED`, and does at most one infrastructure rerun
+  first. Unlike `/ship-pr`, it removes the fresh worktree it made when no step created links in it.
 - `/ship-pr`: when `gh pr checks` returns HTTP 403, watch through the Actions runs API instead. This
   fallback lived only in hand-edited installed copies; those copies are now reviewed adoptions in
   `library.json`, so `agent_setup.py` can update them to the current skill.

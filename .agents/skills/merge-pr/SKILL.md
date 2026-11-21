@@ -34,6 +34,9 @@ and `gh repo view --json visibility,nameWithOwner`.
 - Stop and report if it isn't the user's PR, is a draft, has changes requested, conflicts with its
   base, or another session is working on its branch (`ListAgents`). A PR based on another open PR waits
   for that one.
+- **Stop on `mergeStateStatus` `BLOCKED`.** Branch protection is holding the merge (a required check,
+  review or rule). Read the required checks from it with `gh api repos/<owner>/<repo>/branches/<base>/protection`
+  where the token allows; they are the "required" checks in step 3.
 - **Review sign-off still applies.** If the project tracks work (an `.agent-flow/` folder) and the PR
   body says `Refs <ticket>`, that ticket must be approved (`done`) by a reviewer other than its author.
   If it's still in review, stop; this skill never stands in for a review.
@@ -42,8 +45,14 @@ and `gh repo view --json visibility,nameWithOwner`.
 ## 2. Find out which case holds
 
 List the runs for the head commit: `gh run list --commit <sha> --json databaseId,name,status,conclusion`.
-`gh pr checks` and the check-runs API often return HTTP 403 with this token; use the runs API. Then
+`gh pr checks` often returns HTTP 403 with this token; for Actions, the runs API is the source. Then
 list the workflows on that commit: `git ls-tree -r --name-only <sha> -- .github/workflows`.
+
+**Read the checks outside Actions in every case.** `gh api repos/<owner>/<repo>/commits/<sha>/check-runs`
+and `gh api repos/<owner>/<repo>/commits/<sha>/status` list third-party check runs and commit statuses
+that `gh run list` can't see. Any failing or pending entry that isn't one of the Actions jobs listed
+above stops the run. If those APIs return 403, say in the report that checks outside Actions could not
+be seen, and stop if branch protection or recent base commits show that such checks exist.
 
 Exactly one of these three cases must hold.
 
@@ -51,9 +60,8 @@ Exactly one of these three cases must hold.
 
 - at least one run exists for `<sha>`, every run is `completed`, and every run's conclusion is
   `success` (`skipped` and `neutral` count as passing);
-- no check from outside Actions failed: the check-runs and status APIs for `<sha>` (below) show no
-  failing or pending entry. If that API returns 403, say in the report that checks outside Actions
-  could not be seen;
+- no check from outside Actions failed: the check-runs and status APIs for `<sha>` (above) show no
+  failing or pending entry;
 - `mergeStateStatus` is not `BLOCKED`.
 
 Quote the green run ids in the report, skip step 3, and go to step 4. A run on an older commit doesn't
@@ -67,10 +75,16 @@ count: the runs must be for `<sha>`.
   `gh run view <id>` shows an annotation that the job was not started, such as "recent account payments
   have failed or your spending limit needs to be increased", "spending limit", or "You have exceeded
   the included minutes";
-- the same cause failed a run on another recent commit, so it isn't specific to this change.
+- the same cause failed a run on another recent commit, so it isn't specific to this change;
+- no check outside Actions failed or is pending (above).
+
+**Do the one infrastructure rerun first** (`gh run rerun <id>`), and never more than one. If its jobs
+still don't start, this case holds. If a job now runs a step, decide again on the rerun's result: all
+green is the "CI already passed" case; a job that ran and failed means stop, a real failure for
+`/ship-pr`.
 
 Quote the annotation and the run ids in the report. If any job ran a step and failed, stop: that is a
-real failure for `/ship-pr`. Don't re-run jobs repeatedly: one rerun to confirm the cause is enough.
+real failure for `/ship-pr`.
 
 **The repository has no CI.** This case holds only when **all** of these are true:
 
@@ -132,7 +146,8 @@ Any failing step: stop and report it with its output. Don't fix it here; that's 
 Immediately before merging, re-read the PR and confirm:
 
 - the head is still `<sha>`, with no new commits;
-- it is mergeable with no conflicts, and no review has changed;
+- it is mergeable with no conflicts, `mergeStateStatus` is not `BLOCKED`, and no review has changed;
+- the checks outside Actions still show nothing failing or pending;
 - the runs for `<sha>` still show the case from step 2: all green, only the not-started cause, or, with
   no CI, still none.
 
@@ -154,7 +169,9 @@ merge succeeded. If it fails, check `gh pr view <n> --json state,mergeCommit` be
 - Return a shared checkout to its default branch, and fast-forward it only if it's clean.
 - Remove the worktree this run created with `git worktree remove <path>`, but only if no step created
   links inside it (`node_modules` from a package install, junctions). Otherwise leave it and give the
-  user the steps: remove the links first, then the worktree.
+  user the steps: remove the links first, then the worktree. This differs from `/ship-pr`, which leaves
+  every worktree for the user, on purpose: `/merge-pr` made this one itself, fresh, and ran every step
+  in it, so it knows whether any links exist.
 
 ## Report
 

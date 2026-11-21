@@ -17,7 +17,15 @@
     "a diff review alone isn't\nevidence for a merge",
     "**CI already passed.** This case holds only when **all** of these are true:",
     "every run's conclusion is\n  `success`",
-    "the runs must be for `<sha>`."
+    "the runs must be for `<sha>`.",
+    "**Read the checks outside Actions in every case.**",
+    "Any failing or pending entry that isn't one of the Actions jobs listed\nabove stops the run.",
+    "**Stop on `mergeStateStatus` `BLOCKED`.**",
+    "**Do the one infrastructure rerun first** (`gh run rerun <id>`), and never more than one.",
+    "a job that ran and failed means stop, a real failure for\n`/ship-pr`.",
+    "the same cause failed a run on another recent commit",
+    "every run is `completed`. Pending or queued runs mean wait",
+    "the head is still `<sha>`, with no new commits;"
   ],
   "must_not_contain": []
 }
