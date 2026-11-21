@@ -1,11 +1,11 @@
 ---
 name: merge-pr
-description: "Merge one GitHub PR: when its CI already passed on the exact head commit, merge it after the same re-checks; when CI cannot run (Actions cannot start for reasons unrelated to the change, such as billing, spending limit, exhausted minutes or a runner outage, or the repository has no CI at all), prove which, run the workflow's steps (or, with no CI, the project's declared checks) locally in a clean worktree on that commit, then merge pinned to it. Runs only when the user types /merge-pr, with a PR number, URL or branch; with none it uses the current branch's PR. For CI that ran and failed, use /ship-pr."
-capability: "Merge a pull request whose CI passed on its head commit, or on local CI evidence when GitHub Actions cannot start or the repository has no CI, within fixed limits."
+description: "Merge one GitHub PR: when its CI already passed on the exact head commit, merge it after the same re-checks; when some runs passed and the rest could not start, replay only the ones that didn't; when CI cannot run (Actions cannot start for reasons unrelated to the change, such as billing, spending limit, exhausted minutes or a runner outage, or the repository has no CI at all), prove which, run the workflow's steps (or, with no CI, the project's declared checks) locally in a clean worktree on that commit, then merge pinned to it. Runs only when the user types /merge-pr, with a PR number, URL or branch; with none it uses the current branch's PR. For CI that ran and failed, use /ship-pr."
+capability: "Merge a pull request whose CI passed on its head commit, or on local CI evidence when GitHub Actions cannot start (for all runs or only some) or the repository has no CI, within fixed limits."
 side_effect_level: remote_write
 approval_required: true
 requires_tools: "git and gh; the commands in the repository's workflow files, or its declared build, lint and test commands when it has none."
-output_schema: "Which case held (the green run ids; or why remote CI could not run, with run ids and the annotation, or that the head commit has no workflows and no runs), a table of each local workflow step with its exit code when one ran, the merge commit, and anything left with the reason and a paste-ready command."
+output_schema: "Which case held (the green run ids; the passed run ids plus the not-started annotation for a mixed result; or why remote CI could not run, with run ids and the annotation, or that the head commit has no workflows and no runs), a table of each local workflow step with its exit code when one ran, the merge commit, and anything left with the reason and a paste-ready command."
 risk_class: high
 disable-model-invocation: true
 ---
@@ -14,7 +14,8 @@ disable-model-invocation: true
 
 `/merge-pr` means: **merge this PR.** When its CI already passed on the head commit, that is the
 evidence. When GitHub can't run its CI (its Actions can't start, or the repository has none), the
-evidence is a local run. Typing it approves merging this PR and nothing else. It is not
+evidence is a local run. When only some runs started and passed, they count, and only the rest are
+replayed locally. Typing it approves merging this PR and nothing else. It is not
 standing approval, and it never pushes fixes. Never run this skill on your own initiative.
 
 One PR per run. If the user names none, use the current branch's PR. If that's ambiguous, stop and ask.
@@ -75,12 +76,14 @@ count: the runs must be for `<sha>`.
 **Actions could not start.** This case holds only when **all** of these are true:
 
 - the head commit has `.github/workflows`;
-- at least one run exists for `<sha>`, and every run is `completed`. Pending or queued runs mean wait;
+- at least one run exists for `<sha>`, and every run is `completed`. Pending or queued runs mean wait,
+  then stop if they are still pending after about 15 minutes;
 - for every run, no job executed a step: `gh run view <id> --json jobs` shows jobs with no steps, or
   `gh run view <id>` shows an annotation that the job was not started, such as "recent account payments
   have failed or your spending limit needs to be increased", "spending limit", or "You have exceeded
   the included minutes";
-- the same cause failed a run on another recent commit, so it isn't specific to this change;
+- the same cause failed a run on another recent commit, one outside this PR's branch (the base branch
+  or another PR), so it isn't specific to this change;
 - no check outside Actions failed or is pending (above).
 
 **Do the one infrastructure rerun first** (`gh run rerun <id>`), and never more than one. If its jobs
@@ -93,10 +96,9 @@ real failure for `/ship-pr`.
 
 **The repository has no CI.** This case holds only when **all** of these are true:
 
-They must hold for the base branch as well as for the head commit.
-
 - `git ls-tree` lists nothing under `.github/workflows` for `<sha>`, and nothing for the base branch's
-  tip (`git ls-tree -r --name-only origin/<base> -- .github/workflows`). A PR that deletes the workflows
+  tip (`git fetch origin <base>` first, so the tip is current, then
+  `git ls-tree -r --name-only origin/<base> -- .github/workflows`). A PR that deletes the workflows
   doesn't make the repository CI-free: that is "workflows exist but no run appeared", and it stops;
 - no run exists for `<sha>`;
 - no check from outside Actions exists either: `gh api repos/<owner>/<repo>/commits/<sha>/check-runs`
@@ -104,14 +106,16 @@ They must hold for the base branch as well as for the head commit.
   the base branch's latest few commits have none either. If that API returns 403, say in the report
   that checks outside Actions could not be seen.
 
-Quote these results in the report in place of the annotation.
+They must hold for the base branch as well as for the head commit. Quote these results in the report in
+place of the annotation.
 
 **Some runs passed, the rest could not start.** This case holds only when **all** of these are true:
 
 - every run for `<sha>` is `completed`;
 - each run either passed (as in "CI already passed", with at least one `success`) or had no job execute
   a step, with a not-started annotation (as in "Actions could not start");
-- the same not-started cause failed a run on another recent commit;
+- at least one run did not start (otherwise this is "CI already passed");
+- the same not-started cause failed a run on another recent commit outside this PR's branch;
 - the one infrastructure rerun of the not-started runs was done first, as above, and they still didn't
   start;
 - no check outside Actions failed or is pending, and `mergeStateStatus` is not `BLOCKED`.
@@ -119,8 +123,8 @@ Quote these results in the report in place of the annotation.
 The passed runs count as evidence: replay only the workflows whose jobs didn't start, in step 3. Quote
 the passed run ids and the not-started annotation in the report.
 
-Anything else means stop and report: workflows exist but no run appeared, runs are still pending, or a
-job ran a step and failed.
+Anything else means stop and report: workflows exist but no run appeared, runs are still pending after
+the wait above, every run was skipped, or a job ran a step and failed.
 
 ## 3. Run CI locally on the exact commit
 
@@ -134,7 +138,8 @@ git worktree add --detach <scratch>/merge-pr-<n> <sha>
 
 **With workflows,** read every workflow that triggers on `pull_request` or `push` to the base branch.
 Run each job's `run:` steps in order, with the same commands, working directory and environment values,
-from the worktree.
+from the worktree. In the "some runs passed" case, replay only the workflows whose jobs didn't start;
+the passed runs already cover the rest.
 
 **With no CI,** there is no workflow to replay. Run the project's declared checks instead: the build,
 lint and test commands in its `AGENTS.md`, `CLAUDE.md` or README, then the standard checks of each

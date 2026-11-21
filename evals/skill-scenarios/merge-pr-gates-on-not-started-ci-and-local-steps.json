@@ -1,6 +1,6 @@
 {
   "id": "merge-pr-gates-on-not-started-ci-and-local-steps",
-  "description": "Protect /merge-pr's gate: it merges when CI already passed on the exact head commit (all runs success, nothing outside Actions failing, not BLOCKED), or only when no CI job ran a step (Actions could not start) or the repository has no CI at all, after the workflow's own run: steps, or with no CI the project's declared checks, pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr, and a no-CI repository is handled here, not sent to /ship-pr.",
+  "description": "Protect /merge-pr's gate: it merges when CI already passed on the exact head commit (all runs success, nothing outside Actions failing, not BLOCKED), or when some runs passed and the rest could not start (only those are replayed), or only when no CI job ran a step (Actions could not start) or the repository has no CI at all, after the workflow's own run: steps, or with no CI the project's declared checks, pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr, and a no-CI repository is handled here, not sent to /ship-pr.",
   "target_asset": ".claude/skills/merge-pr/SKILL.md",
   "linked_docs": [],
   "must_contain": [
@@ -37,7 +37,13 @@
     "the checks outside Actions still show nothing failing or pending;",
     "the same\n  mix of passed and not-started runs",
     "If a job now runs a step, decide again on the rerun's result",
-    "This differs from `/ship-pr`, which leaves\n  every worktree for the user, on purpose"
+    "This differs from `/ship-pr`, which leaves\n  every worktree for the user, on purpose",
+    "`git fetch origin <base>` first",
+    "one outside this PR's branch",
+    "- at least one run did not start (otherwise this is \"CI already passed\");",
+    "replay only the workflows whose jobs didn't start;",
+    "before deciding",
+    "every run was skipped"
   ],
   "must_not_contain": []
 }
