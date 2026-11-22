@@ -1,6 +1,6 @@
 ---
 name: centralized-permissions
-description: "Use when setting up, reconfiguring, auditing, or restoring the centralized AI agent permission decision gate (hook → Jev → audit → approve | ask) across Claude Code, Cursor/Grok, Codex, and Antigravity, or when reconciling global and project permission policies in <projects-root>."
+description: "Use when setting up, reconfiguring, auditing, or restoring the centralized AI agent permission decision gate (hook → Jev → audit → approve | ask) across Claude Code, Cursor/Grok, Codex, and Antigravity, or when reconciling global and project permission policies in <projects-root>, or when writing or reviewing Claude Code custom auto-mode classifier rules (`autoMode` environment / allow / soft_deny)."
 capability: "Configure, audit, reconcile, apply, and restore centralized cross-harness permission review and safe command tiers."
 side_effect_level: local_write
 approval_required: true
@@ -64,6 +64,7 @@ python -m scripts.manage_permissions verify
 - Tuning command classification tiers, thresholds, or regex patterns in `<projects-root>\_agent-infra\jev\config\permission-policy.json`.
 - Auditing recent permission decisions, latency, or denials across harnesses.
 - Rolling back permission settings after unexpected behavior or test failures.
+- Writing, reviewing or fixing Claude Code custom auto-mode rules (`autoMode` in user settings), or acting on `claude auto-mode critique` feedback.
 
 ### Do NOT use for:
 - Routine coding tasks where permissions are already active.
@@ -126,6 +127,11 @@ To roll back a specific historical receipt:
 python -m scripts.manage_permissions rollback <projects-root>\_agent-infra\jev\backups\<timestamp>\receipt.json
 ```
 Every modified file is restored to its exact byte-identical state and verified by hash.
+
+---
+
+### Workflow D: Claude Code Auto-Mode Custom Rules
+Before you add or change `autoMode` (`environment`, `allow`, `soft_deny`, `hard_deny`) in user settings, read [references/auto-mode-custom-rules.md](references/auto-mode-custom-rules.md). It covers where the classifier reads rules from, keeping `"$defaults"`, scoping per-repo environment entries, slot choice, `soft_deny` wording, and `allow` holes such as wildcards inside nested shell strings. Plan the edit and get the owner's go-ahead like any permission change, then check it with `claude auto-mode config` and `claude auto-mode critique`.
 
 ---
 
