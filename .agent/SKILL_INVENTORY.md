@@ -96,7 +96,7 @@ Jev evidence and reviewed choices: [decision ledger](setup/decisions.json).
 | windows-keep-awake | Explicit bounded Windows sleep prevention | L2 | 2026-10-11 |
 | jev-mcp | Typed semantic Choice/Score/Noul decisions over sanitized state | L2 | 2026-10-11 |
 | llm-wiki | Explicit-root local wiki query, ingestion and validation | L2 | 2026-10-11 |
-| centralized-permissions | Centralized cross-harness permission gate (`infra/jev` + `_agent-infra/jev`), T0-T4 classification, and coin-flip adjudication | L2 | 2026-10-25 |
+| centralized-permissions | Centralized cross-harness permission gate (`infra/jev` + `_agent-infra/jev`), T0-T4 classification, and coin-flip adjudication; auto-mode custom-rule authoring reference | L2 | 2026-11-22 |
 
 Git/fork/PR guidance, environment/dependency guidance and MCP diagnostics were
 merged into their existing skills. Existing inventory entries and project-native
