@@ -39,7 +39,15 @@ Read `.agent/deploy.json` if the project has one; its format is in
 Run `/build` for the recipe's artifacts. Deploy only what that build just produced, from a known commit.
 If the tree is dirty, say so in the report.
 
-## 3. Check what is running
+## 3. Compare first
+
+Compare what this build would put on the machine with what is already there: every file in the install
+folder (SHA-256), every PATH launcher's text, every shortcut's fields and every icon file. If all of them
+match, report **already deployed** and stop here. Run no `stop` step, make no backup, copy nothing and
+don't refresh the icon cache. A rerun on the same commit still rebuilds (usually from cache), but it
+changes nothing on the machine.
+
+## 4. Check what is running
 
 Before replacing anything, look for processes running from the install folder, and for files that are
 locked. A running app, an MCP server held by an open session, a tray app or a scheduled task can't be
@@ -48,37 +56,43 @@ replaced safely.
 - If the recipe has `stop` steps the user approved for this project, run them.
 - Otherwise stop and hand that step to the user: name what is running and the command to stop it.
 
-## 4. Install
+## 5. Install
 
-Locations per OS are in [`references/recipe.md`](references/recipe.md).
+Locations per OS are in [`references/recipe.md`](references/recipe.md). Use one timestamp for this run,
+`<run> = yyyyMMdd-HHmmss`, in every backup name below, so two runs never collide.
 
-0. **Compare first.** If every file in the install folder, every PATH launcher, shortcut and icon
-   already matches what this build would put there (same SHA-256 for files, same fields for shortcuts),
-   report **already deployed** and change nothing: no backup, no copy, no cache refresh. A rerun on the
-   same commit is then a true no-op.
-1. **Back up first.** If the install folder exists, move it to `<folder>.bak-<yyyyMMdd-HHmmss>`, a name
-   unique to this run, so the previous version still runs if the new one doesn't and two runs on one day
-   can't collide. Keep the backup; deleting it is the user's call.
+1. **Back up first.** If the install folder exists, move it to `<folder>.bak-<run>`, so the previous
+   version still runs if the new one doesn't. Keep the backup; deleting it is the user's call.
 2. **Copy** the artifacts (and the files they need, such as `plugins/` or runtime folders) into the
    install folder. Install outside any git checkout, so a branch switch or a clean can't break what the
    user launches.
 3. **CLI tools:** for each one the recipe marks `on_path`, put a **launcher** in the user's PATH
-   folder that runs the installed executable (`<name>.cmd` with `@"<install>\<exe>" %*` on Windows, a
-   small `exec` shell script on macOS and Linux). Don't copy the executable itself: it would lose the
-   files it loads from beside it, such as `plugins/` or runtime DLLs. Never edit PATH or other environment
-   settings; if the PATH folder isn't on PATH, say so and give the user the command.
+   folder that runs the installed executable. Don't copy the executable itself: it would lose the files
+   it loads from beside it, such as `plugins/` or runtime DLLs. On Windows the launcher is
+   `<name>.cmd`, exactly these two lines:
 
-## 5. Shortcuts and icons
+   ```bat
+   @echo off
+   "%LOCALAPPDATA%\Programs\<install_name>\<exe>" %*
+   ```
 
-For each shortcut in the recipe:
+   On macOS and Linux it is a two-line `sh` script that `exec`s the installed executable with `"$@"`.
+   Back up an existing launcher into the run's backup folder (step 6) before replacing it. Never edit
+   PATH or other environment settings; if the PATH folder isn't on PATH, say so and give the user the
+   command.
+
+## 6. Shortcuts and icons
+
+Back up first, into one folder for this run: `<icon folder>/deploy-backup-<install_name>-<run>/`, holding
+each old shortcut, icon file and PATH launcher this run replaces. Then, for each shortcut in the recipe:
 
 - Copy its icon to the per-user icon folder under a **new file name** whenever the image changed. Windows
   Explorer keeps showing a cached icon until the shortcut points at a different file. Icon rules are in
   the `app-icons` skill.
-- Back up the existing shortcut, then point it at the installed executable and the icon.
+- Point the shortcut at the installed executable and the icon.
 - On Windows, refresh the icon cache (`ie4uinit.exe -show`).
 
-## 6. Verify what the user will see
+## 7. Verify what the user will see
 
 Read everything back; a write that returned no error isn't proof.
 
@@ -87,7 +101,7 @@ Read everything back; a write that returned no error isn't proof.
 - The icon the executable embeds is the intended one, when the project ships one.
 - Each PATH launcher resolves from a new shell (`Get-Command <name>` or `command -v <name>`) and
   prints the new version.
-- Running `/deploy` again on the same commit stops at step 4.0 with **already deployed**.
+- Running `/deploy` again on the same commit stops at step 3 with **already deployed**.
 
 ## Never
 
