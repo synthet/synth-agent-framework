@@ -1,0 +1,33 @@
+{
+  "id": "deploy-installs-on-this-machine-only",
+  "description": "Protect /deploy: user-typed only, this machine only, the project's own procedure first, a backup before replacing, a stop on running or locked targets, no changes to MCP registrations, scheduled tasks, settings or PATH, new icon file names for Explorer's cache, and read-back verification. A rerun that finds everything matching changes nothing; backups are unique per run; CLI tools get launchers, not copies.",
+  "target_asset": ".claude/skills/deploy/SKILL.md",
+  "linked_docs": [],
+  "must_contain": [
+    "disable-model-invocation: true",
+    "this machine only: never a server, production, a cloud service or another PC",
+    "**A project procedure wins.**",
+    "A project with nothing to install is a valid answer.",
+    "can't be\nreplaced safely.",
+    "Otherwise stop and hand that step to the user",
+    "**Back up first.**",
+    "Install outside any git checkout",
+    "Never edit PATH or other environment\n   settings",
+    "**new file name**",
+    "Read everything back; a write that returned no error isn't proof.",
+    "Change MCP registrations, the definitions of scheduled tasks or services, harness settings,\n  permission policy or PATH.",
+    "Delete a backup or an old install.",
+    "**Compare first.**",
+    "report **already deployed** and change nothing: no backup, no copy, no cache refresh.",
+    "`<folder>.bak-<yyyyMMdd-HHmmss>`, a name\n   unique to this run",
+    "put a **launcher** in the user's PATH",
+    "Don't copy the executable itself",
+    "stops at step 4.0 with **already deployed**."
+  ],
+  "must_not_contain": [
+    "side_effect_level: read_only",
+    "Remove-Item",
+    "rm -rf",
+    "setx"
+  ]
+}

@@ -41,6 +41,8 @@ commands or edit code/config as part of its procedure.
 | use-jev | Delegate pending decisions, blocked steps and triage items to Jev in one batched call; act on confident low-risk picks, hand back the rest | L2 | 2026-11-01 |
 | decide-with-agents | Settle decisions, research questions and plan approvals: sub-agents chosen by task complexity (Fable, Opus, Sonnet), checking their claims, a final Jev call and a provenance receipt | L2 | 2026-11-19 |
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
+| build | Build the current project for this OS with its own procedure (recipe, release script, documented command, else the ecosystem default) and check each artifact by running it. Never installs | L2 | 2026-11-21 |
+| deploy | Install a fresh build on this machine only: the project procedure first, else a per-user install folder with a backup, PATH-folder tools, and shortcuts with new icon names; stops on running or locked targets; reads everything back. User-typed only | L2 | 2026-11-21 |
 | fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
 | step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |

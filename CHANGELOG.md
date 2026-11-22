@@ -8,6 +8,13 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `/build` and `/deploy` skills: `/build` builds the current project for this OS with its own
+  procedure and checks each artifact by running it. `/deploy` (user-typed only) installs that build
+  on this machine only: the project's own procedure first, else a per-user install folder with a
+  backup of the previous version, CLI tools in the user's PATH folder, and desktop shortcuts with new
+  icon file names, then reads back the version, shortcut and icon. It stops on running or locked
+  targets and never touches MCP registrations, scheduled tasks, settings or PATH. Per-project details
+  live in `.agent/deploy.json`.
 - `/merge-pr` skill: merges one PR whose CI exists but cannot start (Actions billing, spending limit,
   used-up minutes). It proves that no job ran a step, runs every workflow `run:` step in a clean
   detached worktree on the head commit, requires the review sign-off, and merges pinned to that
