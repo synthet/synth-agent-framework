@@ -69,7 +69,7 @@ Locations per OS are in [`references/recipe.md`](references/recipe.md). Use one 
 3. **CLI tools:** for each one the recipe marks `on_path`, put a **launcher** in the user's PATH
    folder that runs the installed executable. Don't copy the executable itself: it would lose the files
    it loads from beside it, such as `plugins/` or runtime DLLs. On Windows the launcher is
-   `<name>.cmd`, exactly these two lines:
+   `<name>.cmd`, exactly these two lines with CRLF line endings:
 
    ```bat
    @echo off

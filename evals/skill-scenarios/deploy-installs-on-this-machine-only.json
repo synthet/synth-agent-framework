@@ -25,7 +25,9 @@
     "put a **launcher** in the user's PATH",
     "@echo off\n   \"%LOCALAPPDATA%\\Programs\\<install_name>\\<exe>\" %*",
     "Back up an existing launcher into the run's backup folder",
-    "stops at step 3 with **already deployed**."
+    "stops at step 3 with **already deployed**.",
+    "`<run> = yyyyMMdd-HHmmss`, in every backup name below, so two runs never collide.",
+    "exactly these two lines with CRLF line endings:"
   ],
   "must_not_contain": [
     "side_effect_level: read_only",
