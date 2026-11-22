@@ -54,8 +54,10 @@ Follow the shape of the defaults (`claude auto-mode defaults`):
 - **Match whole words.** `*prod*` also matches `product`, `reproduce` and `produce`. Write
   "file names where `prod` is a whole word or a `_`/`-`/`.`-delimited segment".
 - **Say how it clears:** `[named+specifics — must name: the specific file being modified]`.
-- **Define the action.** Does "writes" mean Edit/Write calls only, or also `rm`, `mv`,
-  `git checkout -- <file>`, `git restore`, and running a script that regenerates the file?
+- **Define the action by its effect:** "any command whose effect overwrites or deletes such a
+  file" covers Edit/Write, `rm`, `mv`, `git checkout`/`restore`/`reset`/`stash`/`clean`/`switch`
+  and a script that regenerates the file. Listing commands always misses one. Say whether creating
+  a new matching file counts, and match the long form too (`prod` and `production`).
 - **Give the reason**, e.g. "these hold tuned thresholds used downstream". The classifier uses it to
   judge indirect writes.
 
@@ -66,13 +68,21 @@ that remove or loosen checks in the repo's secret-scanning script or its tests."
 
 An `allow` entry can override a soft block, so a loose one is a real hole.
 
+- **Carve out your own protected files.** An allow for a command that writes (`ruff --fix`, a test
+  run that writes reports) also clears writes to files your `soft_deny` entries protect. Add: "does
+  not cover files matched by <soft_deny name>."
+
 - **No wildcard inside a quoted nested shell.** In `Bash(wsl -e bash -lc "pytest ...*")` the `*`
   also admits `...; curl ... | sh"`. The same goes for `bash -c`, `sh -c` and
   `pwsh -Command`. Write prose instead: "only pytest flags and paths after `pytest`; no `;`,
   `&&`, `|`, `$(...)` or redirection."
-- **Test runners run code.** pytest imports `conftest.py` and the test files, and `bash -l`
-  sources login profiles. Add: "does not apply if tests, `conftest.py`, test config or shell
-  profiles were changed this session with content that matches a block rule."
+- **Test runners run code.** pytest imports `conftest.py`, the test files and the source they
+  import, and `bash -l` sources login profiles. Add: "does not apply if any file the run imports or
+  executes, test config or shell profiles were changed this session." Also exclude flags that load
+  outside code or config (`-p`, `-c`, `--rootdir`, `-o`/`--override-ini`), environment-variable
+  prefixes (`PYTHONPATH=`, `PYTEST_ADDOPTS=`), and pin the working directory.
+- **Use one list of excluded operators** (`;`, `&&`, `||`, `|`, `$(...)`, backticks, redirection)
+  in every allow entry, so the entries don't contradict each other.
 - **Don't restate the defaults.** Running the repo's own tests or a linter matches no default block.
   An allow entry that repeats it adds nothing and can only widen what is cleared.
 - **Scope it.** Name the directory, its WSL path too, and say the entry covers that one command and
@@ -83,7 +93,10 @@ An `allow` entry can override a soft block, so a loose one is a real hole.
 1. `claude auto-mode config`: the merged result. Confirm the defaults are present where you kept
    `"$defaults"` and that no repo-specific entry reads as global.
 2. `claude auto-mode critique`: AI feedback on the custom entries. It reads the settings in use, so
-   run it after the change is applied, and roll back if it flags a regression.
+   run it after the change is applied, and roll back if it flags a regression. It can be wrong about
+   facts: check a claimed path or file against the repo before you act on it.
+3. When you rewrite the section, compare old and new entries by slot name, not by position, and
+   account for every non-default entry: kept, reworded, or dropped on purpose.
 
 Sources: Claude Code docs, "Configure auto mode"; `claude auto-mode critique` and
 `claude auto-mode defaults` output.
