@@ -49,4 +49,5 @@ lint commands stay where the project documents them (`AGENTS.md`, `.agent/COMMAN
 
 On Windows, set a shortcut with `WScript.Shell` (`CreateShortcut`, then `TargetPath`,
 `WorkingDirectory`, `IconLocation = "<icon>,0"`, `Save()`), and read it back with `CreateShortcut`
-again. Back up the old `.lnk` and icon into a dated folder next to the icons first.
+again. First back up the old `.lnk`, icon and PATH launcher into this run's folder,
+`deploy-backup-<install_name>-<yyyyMMdd-HHmmss>` next to the icons, as in step 6 of the skill.
