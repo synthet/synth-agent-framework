@@ -52,13 +52,21 @@ replaced safely.
 
 Locations per OS are in [`references/recipe.md`](references/recipe.md).
 
-1. **Back up first.** If the install folder exists, move it to `<folder>.bak-<date>`, so the previous
-   version still runs if the new one doesn't. Keep the backup; deleting it is the user's call.
+0. **Compare first.** If every file in the install folder, every PATH launcher, shortcut and icon
+   already matches what this build would put there (same SHA-256 for files, same fields for shortcuts),
+   report **already deployed** and change nothing: no backup, no copy, no cache refresh. A rerun on the
+   same commit is then a true no-op.
+1. **Back up first.** If the install folder exists, move it to `<folder>.bak-<yyyyMMdd-HHmmss>`, a name
+   unique to this run, so the previous version still runs if the new one doesn't and two runs on one day
+   can't collide. Keep the backup; deleting it is the user's call.
 2. **Copy** the artifacts (and the files they need, such as `plugins/` or runtime folders) into the
    install folder. Install outside any git checkout, so a branch switch or a clean can't break what the
    user launches.
-3. **CLI tools:** copy or link each one the recipe lists into the user's PATH folder. Never edit PATH or
-   other environment settings.
+3. **CLI tools:** for each one the recipe marks `on_path`, put a **launcher** in the user's PATH
+   folder that runs the installed executable (`<name>.cmd` with `@"<install>\<exe>" %*` on Windows, a
+   small `exec` shell script on macOS and Linux). Don't copy the executable itself: it would lose the
+   files it loads from beside it, such as `plugins/` or runtime DLLs. Never edit PATH or other environment
+   settings; if the PATH folder isn't on PATH, say so and give the user the command.
 
 ## 5. Shortcuts and icons
 
@@ -77,13 +85,17 @@ Read everything back; a write that returned no error isn't proof.
 - The installed executable's own version or help output names the new version.
 - Each shortcut's target, working folder and icon read back as set.
 - The icon the executable embeds is the intended one, when the project ships one.
-- Running `/deploy` again on the same commit changes nothing except the backup.
+- Each PATH launcher resolves from a new shell (`Get-Command <name>` or `command -v <name>`) and
+  prints the new version.
+- Running `/deploy` again on the same commit stops at step 4.0 with **already deployed**.
 
 ## Never
 
 - Deploy anywhere but this machine, or push, publish, tag or release.
-- Change MCP registrations, scheduled tasks or services, harness settings, permission policy or PATH.
-- Stop a process the user didn't approve stopping, or replace a file that is locked.
+- Change MCP registrations, the definitions of scheduled tasks or services, harness settings,
+  permission policy or PATH.
+- Stop a process, task or service that isn't in the recipe's `stop` list the user approved, or replace a
+  file that is locked.
 - Delete a backup or an old install.
 
 ## Report

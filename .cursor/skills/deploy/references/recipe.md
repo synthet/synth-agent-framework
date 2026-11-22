@@ -8,7 +8,7 @@ lint commands stay where the project documents them (`AGENTS.md`, `.agent/COMMAN
 {
   "app": "acme-files",
   "deploy": "local",
-  "verified": true,
+  "verified": false,
   "build": "python scripts/package_release.py",
   "procedure": null,
   "artifacts_dir": "dist/acme-files-{version}-windows-x64",
@@ -34,9 +34,9 @@ lint commands stay where the project documents them (`AGENTS.md`, `.agent/COMMAN
 | `procedure` | optional; a script or doc section to follow instead of the generic install, such as a cutover runbook |
 | `artifacts_dir` | where the build leaves the files to install; `{version}` expands from the project's version source |
 | `install_name` | the install folder's name (defaults to `app`) |
-| `executables` | each with `kind` (`gui`, `cli`, `service`), the version flag, and `on_path` for CLI tools |
+| `executables` | each with `kind` (`gui`, `cli`, `service`), the version flag, and `on_path` for CLI tools that get a launcher in the PATH folder |
 | `shortcuts` | desktop shortcuts: name, target executable, the icon file in the repo, and its installed file name |
-| `stop` | processes or tasks the user approved stopping before an install, with the command for each |
+| `stop` | processes, tasks or services the user approved stopping (not changing) before an install, with the command for each |
 | `os` | the OSes this recipe was written for |
 
 ## Install locations
