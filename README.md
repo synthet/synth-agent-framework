@@ -1,4 +1,4 @@
-# synthet-code-framework
+# Synth Agent Framework
 
 A generic, reusable **agentic-AI starting point** for new projects. It bundles the agent
 infrastructure that proved its worth across many repos — slash commands, skills, subagents, safety
