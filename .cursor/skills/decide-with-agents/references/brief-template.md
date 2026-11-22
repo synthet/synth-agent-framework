@@ -9,6 +9,8 @@ Decide [the question] and return a recommendation.
 Constraints:
 - Read-only on repo code and evidence: do NOT edit repo files, commit, push, merge or switch the shared checkout's
   branch. [Reviewers: use a temporary detached worktree (git worktree add --detach <tmp> <ref>) and remove it after.]
+- Evidence ref: [exact fetched ref, e.g. origin/main@<sha>]. Read files at that ref (git show <ref>:<path> or the
+  worktree), not the local branch, which may be stale.
 - Write scratch files only in [scratch folder] (create it).
 - [No GPU. | GPU allowed for: ...] [No network. | Web search allowed for public facts only; never send private
   paths, names or data.]
