@@ -1,6 +1,6 @@
 ---
 name: synthet-repos
-description: "Use when choosing which public synthet tool or repository fits a task, or when a task mentions agent-flow, agent-mailbox, agent-swarm, llm-wiki, jev-mcp, win-gui-mcp, hetzner-mcp, lightroom-mcp or everypixel-mcp."
+description: "Use when choosing which public synthet tool or repository fits a task, or when a task mentions agent-flow, agent-mailbox, agent-swarm, llm-wiki, jev-mcp, win-gui-mcp, hetzner-mcp, lightroom-classic-mcp or everypixel-mcp."
 capability: "Map a task to the public synthet repository that owns it"
 side_effect_level: read_only
 approval_required: false
@@ -30,7 +30,7 @@ Use this map to find the public repository that owns a capability. Then read tha
 |---|---|
 | `win-gui-mcp` | Windows desktop automation with a snapshot and ref API |
 | `hetzner-mcp` | Hetzner Cloud through fixed `hcloud` commands |
-| `lightroom-mcp` | Adobe Lightroom Classic automation through a Lua plugin |
+| `lightroom-classic-mcp` | Adobe Lightroom Classic automation through a Lua plugin |
 | `everypixel-mcp` | Everypixel Labs media analysis, generation and speech tools |
 
 ## Rules
