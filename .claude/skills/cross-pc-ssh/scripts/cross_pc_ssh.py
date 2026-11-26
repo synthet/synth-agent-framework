@@ -155,7 +155,14 @@ def choose(local: dict, candidates: list[dict], path: str | None = None) -> dict
     checkout beats a linked worktree. A tie, or no match, raises UsageError listing what was found.
     """
     roots = set(local["roots"])
-    same = [c for c in candidates if roots & set(c.get("roots") or [])]
+
+    def same_repo(c: dict) -> bool:
+        if roots & set(c.get("roots") or []):
+            return True
+        # A shallow clone's "roots" are its shallow boundary, not the real root: accept it by origin only.
+        return bool((c.get("shallow") or local.get("shallow")) and local["slug"] and c.get("slug") == local["slug"])
+
+    same = [c for c in candidates if same_repo(c)]
     if path is not None:
         hit = [c for c in same if c["path"].lower().rstrip("\\") == path.lower().rstrip("\\")]
         if not hit:
@@ -182,6 +189,22 @@ def cache_key(local: dict) -> str:
     return local["slug"] or "root:" + local["roots"][0]
 
 
+def want_roots(local: dict, target: dict) -> list[str]:
+    """Root commits the guard accepts on the peer: this checkout's, plus the peer's own when either side is
+    shallow (a shallow boundary was matched by origin, so only those commits prove it is the same clone)."""
+    extra = (target.get("roots") or []) if (target.get("shallow") or local.get("shallow")) else []
+    return list(dict.fromkeys([*local["roots"], *extra]))
+
+
+def recalled_target(cache: dict, local: dict, peer: str) -> dict | None:
+    """The remembered peer checkout as a target ({path, shallow, roots}), or None."""
+    path = recall(cache, local, peer)
+    if not path:
+        return None
+    entry = cache[cache_key(local)]["peers"][peer]
+    return {"path": path, "shallow": bool(entry.get("shallow")), "roots": list(entry.get("roots") or [])}
+
+
 def recall(cache: dict, local: dict, peer: str) -> str | None:
     """The remembered peer path for this repository, if the entry still has the same root commit."""
     entry = cache.get(cache_key(local)) or {}
@@ -190,10 +213,13 @@ def recall(cache: dict, local: dict, peer: str) -> str | None:
     return ((entry.get("peers") or {}).get(peer) or {}).get("path")
 
 
-def remember(cache: dict, local: dict, peer: str, remote_path: str, when: str) -> None:
+def remember(cache: dict, local: dict, peer: str, remote_path: str, when: str, found: dict | None = None) -> None:
     entry = cache.setdefault(cache_key(local), {})
     entry.update({"github": local["origin"], "root": local["roots"][0], "local": local["path"]})
-    entry.setdefault("peers", {})[peer] = {"path": remote_path, "found": when}
+    record: dict = {"path": remote_path, "found": when}
+    if found and (found.get("shallow") or local.get("shallow")):
+        record.update({"shallow": bool(found.get("shallow")), "roots": list(found.get("roots") or [])})
+    entry.setdefault("peers", {})[peer] = record
 
 
 def forget(cache: dict, local: dict, peer: str) -> None:
@@ -240,7 +266,7 @@ def guard(path: str, roots: list[str]) -> str:
     want = ",".join(ps_quote(r) for r in roots)
     return (PRELUDE + f"$c={ps_quote(path)};try{{Set-Location -LiteralPath $c -ErrorAction Stop}}catch{{"
             f"[Console]::Error.WriteLine('not found: '+$c);exit {EXIT_IDENTITY}}};"
-            f"$w=@({want});$r=@(git rev-list --max-parents=0 HEAD 2>$null);"
+            f"$w=@({want});$r=@(git rev-list --max-parents=0 --all 2>$null);"
             "$t=(git rev-parse --show-toplevel 2>$null) -replace '/','\\';"
             "if(-not($r|Where-Object{$w -contains $_}) -or $t -ne $c){"
             "[Console]::Error.WriteLine('identity check failed: '+$c+' is not the expected checkout');"
@@ -264,7 +290,8 @@ LOCATE = PRELUDE + (
     "$g=Get-Item -LiteralPath (Join-Path $_.FullName '.git') -Force;"
     "[pscustomobject]@{path=$_.FullName;name=$_.Name;worktree=-not $g.PSIsContainer;"
     "origin=(git -C $_.FullName remote get-url origin 2>$null);"
-    "roots=@(git -C $_.FullName rev-list --max-parents=0 HEAD 2>$null)}}};"
+    "roots=@(git -C $_.FullName rev-list --max-parents=0 --all 2>$null);"
+    "shallow=((git -C $_.FullName rev-parse --is-shallow-repository 2>$null) -eq 'true')}}};"
     "ConvertTo-Json -Compress -Depth 3 @($o)"
 )
 
@@ -281,10 +308,12 @@ def local_identity(repo: Path) -> dict:
     if not top:
         raise UsageError(f"{repo} is not inside a git checkout")
     origin = git_local(repo, "remote", "get-url", "origin") or None
-    roots = git_local(repo, "rev-list", "--max-parents=0", "HEAD").split()
+    # Every ref's roots, not only HEAD's: the checked-out branch may have an unrelated history.
+    roots = sorted(set(git_local(repo, "rev-list", "--max-parents=0", "--all").split()))
     if not roots:
         raise UsageError("this checkout has no commits")
     return {"path": top, "name": Path(top).name, "origin": origin, "slug": repo_slug(origin), "roots": roots,
+            "shallow": git_local(repo, "rev-parse", "--is-shallow-repository") == "true",
             "head": git_local(repo, "rev-parse", "HEAD"), "branch": git_local(repo, "rev-parse", "--abbrev-ref", "HEAD")}
 
 
@@ -364,7 +393,7 @@ def locate(peer: str, local: dict, cfg: dict, path: str | None) -> dict:
 
 def run_payload(peer: str, target: dict, local: dict, body: str,
                 timeout: int = 120, stream: bool = False, retry: bool = False) -> int:
-    script = guard(target["path"], local["roots"]) + body
+    script = guard(target["path"], want_roots(local, target)) + body
     r = ssh(peer, script, timeout=timeout, capture=not stream)
     if retry and r.returncode == EXIT_IDENTITY:
         return r.returncode  # the caller searches again; nothing ran
@@ -414,11 +443,11 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config()
         peer = resolve_peer(a.peer, cfg)
         cache = load_cache(CACHE)
-        cached = None if a.path or getattr(a, "rescan", False) else recall(cache, local, peer)
+        cached = None if a.path or getattr(a, "rescan", False) else recalled_target(cache, local, peer)
 
         def search() -> dict:
             found = locate(peer, local, cfg, a.path)
-            remember(cache, local, peer, found["path"], datetime.now(timezone.utc).isoformat(timespec="seconds"))
+            remember(cache, local, peer, found["path"], datetime.now(timezone.utc).isoformat(timespec="seconds"), found)
             save_cache(CACHE, cache)
             return found
 
@@ -435,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
                 target = search()
             return run(target, False)
 
-        target = {"path": cached} if cached else search()
+        target = cached or search()
         if a.cmd == "locate":
             if cached:
                 with_target(lambda t, retry: run_payload(peer, t, local, "", retry=retry))

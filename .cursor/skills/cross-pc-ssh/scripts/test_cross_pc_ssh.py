@@ -124,6 +124,22 @@ class Choose(unittest.TestCase):
             cps.choose(LOCAL, cs)
         self.assertEqual(cps.choose(LOCAL, cs, path="F:\\code\\widget\\")["path"], "F:\\code\\widget")
 
+    def test_shallow_clone_matches_by_origin_only(self):
+        boundary = ("c" * 40,)
+        got = cps.choose(LOCAL, [dict(cand("E:\\src\\widget", roots=boundary), shallow=True)])
+        self.assertEqual(got["path"], "E:\\src\\widget")
+        with self.assertRaises(cps.UsageError):  # shallow but another origin
+            cps.choose(LOCAL, [dict(cand("E:\\src\\fork", slug="github.com/fork/widget", roots=boundary), shallow=True)])
+        with self.assertRaises(cps.UsageError):  # not shallow, roots differ: still refused
+            cps.choose(LOCAL, [cand("E:\\src\\widget", roots=boundary)])
+        got = cps.choose(dict(LOCAL, shallow=True, roots=["d" * 40]), [cand("E:\\src\\widget")])
+        self.assertEqual(got["path"], "E:\\src\\widget")
+
+    def test_guard_roots_include_the_shallow_boundary(self):
+        target = {"path": "E:\\src\\widget", "shallow": True, "roots": ["c" * 40]}
+        self.assertEqual(cps.want_roots(LOCAL, target), ["a" * 40, "c" * 40])
+        self.assertEqual(cps.want_roots(LOCAL, {"path": "x", "roots": ["c" * 40]}), ["a" * 40])
+
     def test_path_must_still_match_identity(self):
         with self.assertRaises(cps.UsageError):
             cps.choose(LOCAL, [cand("E:\\src\\widget", roots=("b" * 40,))], path="E:\\src\\widget")
@@ -143,6 +159,14 @@ class Cache(unittest.TestCase):
         self.assertIsNone(cps.recall(cache, self.LOCAL, "desk"))
         cps.forget(cache, self.LOCAL, "laptop")
         self.assertIsNone(cps.recall(cache, self.LOCAL, "laptop"))
+
+    def test_shallow_target_survives_the_cache(self):
+        cache = {}
+        found = {"path": "F:\\code\\widget", "shallow": True, "roots": ["c" * 40]}
+        cps.remember(cache, self.LOCAL, "laptop", found["path"], "t", found)
+        self.assertEqual(cps.recalled_target(cache, self.LOCAL, "laptop"), found)
+        cps.remember(cache, self.LOCAL, "desk", "G:\\w", "t", {"path": "G:\\w", "roots": ["a" * 40]})
+        self.assertEqual(cps.recalled_target(cache, self.LOCAL, "desk"), {"path": "G:\\w", "shallow": False, "roots": []})
 
     def test_entry_with_other_root_is_ignored(self):
         cache = {}
@@ -214,6 +238,23 @@ class RemoteScripts(unittest.TestCase):
         for bad in ["-oProxyCommand=x", "a b", "a;b", ""]:
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.resolve_peer(bad or None, {})
+
+
+@unittest.skipUnless(shutil.which("git"), "needs git")
+class LocalIdentity(unittest.TestCase):
+    def test_roots_cover_every_ref_not_only_head(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            def g(*args):
+                subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                               check=True, capture_output=True)
+            g("init", "-q", "-b", "main")
+            g("commit", "-q", "--allow-empty", "-m", "main root")
+            g("switch", "-q", "--orphan", "other")
+            g("commit", "-q", "--allow-empty", "-m", "unrelated root")
+            ident = cps.local_identity(Path(d))
+            self.assertEqual(len(ident["roots"]), 2)
+            self.assertFalse(ident["shallow"])
 
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "needs Windows PowerShell")

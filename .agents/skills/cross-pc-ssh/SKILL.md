@@ -43,6 +43,10 @@ path and each peer's path. A cached path is used directly; the identity check st
 the path is gone or no longer this repository (renamed, moved, re-cloned) the helper searches once, updates the
 entry and reruns. `locate --rescan` forces a search. The cache holds machine paths: keep it out of repos.
 
+Root commits come from every ref (`--all`), so a checkout whose current branch has an unrelated history
+still matches. A shallow clone's roots are only its shallow boundary, so it matches by normalized origin
+alone, and the guard then accepts exactly the boundary commits recorded when it was found.
+
 ## Before the first remote command
 
 1. `ssh -n -o BatchMode=yes <alias> hostname` must print the peer's name. If it asks for a password or
