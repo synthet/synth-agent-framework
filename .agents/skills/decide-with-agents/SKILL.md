@@ -61,6 +61,8 @@ Ask for file:line or numbers behind every claim, and for an explicit "owner-only
 Agents make confident mistakes. Before relaying a finding:
 - spot-check the claims the decision rests on: re-run one count, open the cited line;
 - treat a finding that contradicts your own earlier report as a correction: fix the report and say so;
+- ask a follow-up about a finding by resuming the same agent: `SendMessage` to its ID (a name may not survive a
+  restart). It keeps its full history and reports back to you. Spawn a fresh agent only for an independent question;
 - file discovered work as tickets in agent-flow projects, not as notes in chat.
 
 ## 5. Let Jev make the final call
