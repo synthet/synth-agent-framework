@@ -54,6 +54,28 @@ class GitArgs(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.check_git_args(bad)
 
+    def test_abbreviated_and_clustered_options_refused(self):
+        for bad in [["diff", "--outp=x"], ["grep", "--open=cmd", "foo"], ["grep", "--open-files-in-pager"],
+                    ["grep", "-nOcmd", "foo"], ["grep", "-nf", "patterns.txt"], ["grep", "--fi=p.txt", "x"],
+                    ["diff", "-Oorder.txt"], ["diff", "--orderf=o.txt"], ["log", "--ext-d"]]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_git_args(bad)
+
+    def test_reads_outside_checkout_refused(self):
+        for bad in [["diff", "--no-index", "a", "b"], ["diff", "--no-i", "a", "b"], ["blame", "--contents", "x", "f"],
+                    ["blame", "-S", "revs", "f"], ["ls-files", "-X", "ex.txt"], ["ls-files", "--exclude-from=e"],
+                    ["diff", "../outside.txt", "x"], ["diff", "C:\\Windows\\win.ini", "x"], ["log", "--", "/etc"],
+                    ["show", "HEAD:../x"], ["diff", "C:x", "y"], ["diff", "\\\\server\\share\\f", "x"]]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_git_args(bad)
+
+    def test_revision_syntax_still_allowed(self):
+        for ok in [["log", "HEAD~2..main", "--", "docs/x.md"], ["show", "HEAD:docs/readme.md"],
+                   ["log", ":/fix typo"], ["diff", "main...feature", "--stat"], ["log", "-S", "needle"],
+                   ["log", "--no-ext-diff", "-p"], ["ls-files", "-o", "--exclude-standard"]]:
+            with self.subTest(ok=ok):
+                self.assertEqual(cps.check_git_args(ok), ok)
+
 
 class Choose(unittest.TestCase):
     def test_different_drive_and_folder_with_same_identity(self):

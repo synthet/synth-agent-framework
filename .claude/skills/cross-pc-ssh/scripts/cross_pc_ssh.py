@@ -38,7 +38,12 @@ EXIT_IDENTITY = 3
 
 READ_ONLY_GIT = {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "describe", "blame",
                  "grep", "shortlog", "cat-file", "rev-list", "merge-base", "name-rev", "for-each-ref"}
-GIT_DENIED_ARGS = re.compile(r"^(--output|-o$|-O|--open-files-in-pager|--exec|--ext-diff|-c$|--config)")
+# Long options that write files, run programs or read files outside the checkout. git accepts any unambiguous
+# abbreviation (--outp, --open=), so an option is refused when it is a prefix of one of these.
+GIT_DENIED_LONG = ("output", "open-files-in-pager", "exec", "ext-diff", "no-index", "contents", "config", "file",
+                   "orderfile", "ignore-revs-file", "exclude-from", "pathspec-from-file", "upload-pack")
+# Short option letters with the same effect, anywhere in a cluster (-nf, -Ofile). -O: pager or order file.
+GIT_DENIED_SHORT = {"*": "O", "grep": "f", "blame": "S", "ls-files": "X"}
 
 
 class UsageError(Exception):
@@ -86,10 +91,30 @@ def check_git_args(args: list[str]) -> list[str]:
         raise UsageError("git needs a subcommand")
     if args[0] not in READ_ONLY_GIT:
         raise UsageError(f"git {args[0]} is not allowed; read-only subcommands: {', '.join(sorted(READ_ONLY_GIT))}")
+    sub, letters = args[0], GIT_DENIED_SHORT["*"] + GIT_DENIED_SHORT.get(args[0], "")
     for a in args[1:]:
-        if GIT_DENIED_ARGS.match(a):
-            raise UsageError(f"git option {a} is not allowed (writes files or runs programs)")
+        if a == "--":
+            continue
+        if a.startswith("--"):
+            name = a[2:].split("=", 1)[0].lower()
+            if name and any(d.startswith(name) for d in GIT_DENIED_LONG):
+                raise UsageError(f"git option {a} is not allowed (writes files, runs programs or reads outside the checkout)")
+        elif a.startswith("-") and len(a) > 1:
+            if a == "-c" or any(ch in a[1:] for ch in letters):
+                raise UsageError(f"git option {a} is not allowed for git {sub}")
+        elif path_escapes(a):
+            raise UsageError(f"git argument {a!r} points outside the checkout")
     return args
+
+
+def path_escapes(arg: str) -> bool:
+    """True for an absolute, drive, UNC or parent-relative path; rev specs such as HEAD~2..main pass."""
+    if re.match(r"^[A-Za-z]:", arg):  # C:\x and drive-relative C:x
+        return True
+    a = arg.split(":", 1)[1] if re.match(r"^[^:/\\]+:[^/\\]", arg) else arg  # HEAD:docs/x -> docs/x
+    if re.match(r"^([A-Za-z]:|[/\\])", a):
+        return True
+    return any(seg == ".." for seg in re.split(r"[/\\]", a))
 
 
 def choose(local: dict, candidates: list[dict], path: str | None = None) -> dict:
@@ -228,8 +253,12 @@ def locate(peer: str, local: dict, cfg: dict, path: str | None) -> dict:
     if r.returncode != 0:
         raise UsageError(f"ssh {peer} failed (exit {r.returncode}): {clean_err(r.stderr)}")
     text = r.stdout.decode("utf-8", "replace").strip() or "[]"
-    found = json.loads(text)
-    found = [found] if isinstance(found, dict) else found
+    try:
+        found = json.loads(text)
+    except ValueError:
+        raise UsageError(f"unexpected answer from {peer}: {text[:200]!r}")
+    found = [found] if isinstance(found, dict) else (found or [])
+    found = [c for c in found if isinstance(c, dict) and c.get("path")]
     for c in found:
         c["slug"] = repo_slug(c.get("origin"))
         c["roots"] = c.get("roots") or []
@@ -318,7 +347,8 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "agent":
             prompt = Path(a.prompt_file).read_bytes()
             mode = "acceptEdits" if a.allow_edits else "plan"
-            body = ("$in=[Console]::In.ReadToEnd();"
+            body = ("[Console]::InputEncoding=[Text.Encoding]::UTF8;$OutputEncoding=[Text.Encoding]::UTF8;"
+                    "$in=[Console]::In.ReadToEnd();"
                     "if(-not(Get-Command claude -ErrorAction SilentlyContinue)){"
                     "[Console]::Error.WriteLine('claude is not on PATH in the ssh session');exit 5};"
                     f"$in|& claude -p --permission-mode {mode} --output-format text;exit $LASTEXITCODE")

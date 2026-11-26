@@ -41,7 +41,8 @@ else every fixed drive's `Projects` folder and the remote user's `Projects`. Pas
 ## Running an agent on the peer
 
 - Write the prompt to a local file. It travels on stdin, never on the command line.
-- The default is `--permission-mode plan`: the remote agent can read and answer but not edit. Use
+- The default is Claude Code's `--permission-mode plan`, which is meant for reading and answering, not editing
+  (the CLI enforces it; this skill does not add its own check). Use
   `--allow-edits` (acceptEdits) only when the user has asked for changes on the peer, and say which
   checkout and branch they will land on (`status` first). The helper never passes a permission bypass.
 - The remote agent starts in the peer checkout, but that is not a sandbox: it has the peer user's rights,
