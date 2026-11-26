@@ -540,6 +540,13 @@
       "projects": []
     },
     {
+      "id": "cross-pc-ssh",
+      "source": ".claude/skills/cross-pc-ssh",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
       "pack": "global",
