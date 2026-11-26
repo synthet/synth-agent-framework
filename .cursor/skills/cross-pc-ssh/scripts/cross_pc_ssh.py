@@ -12,12 +12,16 @@ runs, file paths must stay inside the checkout, and git is limited to read-only 
     python cross_pc_ssh.py --peer <ssh-alias> ls [REL]
     python cross_pc_ssh.py --peer <ssh-alias> cat REL [--max-bytes N]
     python cross_pc_ssh.py --peer <ssh-alias> git log --oneline -5
-    python cross_pc_ssh.py --peer <ssh-alias> agent --prompt-file PROMPT.md [--allow-edits]
+    python cross_pc_ssh.py --peer <ssh-alias> agent --prompt-file PROMPT.md [--harness claude|codex] [--allow-edits]
 
 The peer comes from --peer, then CROSS_PC_SSH_PEER, then "default_peer" in ~/.config/cross-pc-ssh.json.
 Search roots on the peer come from that file ("peers": {"<alias>": {"roots": [...]}}), else every fixed
 drive's Projects folder and the remote user's Projects folder. Windows peers with Windows PowerShell only.
 Stdlib only; no network access except the ssh client.
+
+Every remote script travels base64-encoded on stdin behind a fixed -EncodedCommand bootstrap, and every
+string inside it (paths, git arguments, the prompt) is embedded as base64, so no quoting or command-line limit
+applies. This is a guard rail for agents, not a security boundary: the SSH key itself grants a full shell.
 """
 from __future__ import annotations
 
@@ -35,8 +39,18 @@ VERSION = 1
 CONFIG = Path.home() / ".config" / "cross-pc-ssh.json"
 CACHE = Path(os.environ.get("CROSS_PC_SSH_CACHE") or Path.home() / ".cache" / "cross-pc-ssh" / "locations.json")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
-MAX_ENCODED = 7000  # cmd.exe caps a command line at 8191 characters
+MAX_ENCODED = 7000  # cmd.exe caps a command line at 8191 characters; only the fixed bootstrap goes there
 EXIT_IDENTITY = 3
+# Read-only agent: only these built-in tools exist in the session (so the peer's allow rules can't add Bash, Edit
+# or Write), and no MCP servers start.
+CLAUDE_READ_ONLY = ["--permission-mode", "dontAsk", "--strict-mcp-config", "--tools", "Read,Grep,Glob"]
+# Names cat never returns, even inside the checkout; matched case-insensitively against each path segment.
+SECRET_DIRS = {".git", ".ssh", ".gnupg", ".aws", ".azure", ".kube"}
+SECRET_NAMES = [re.compile(p, re.I) for p in (
+    r"^\.env(\..+)?$", r"^secrets?(\..+)?$", r"^credentials?(\..+)?$", r".*\.(pem|key|pfx|p12|kdbx|ppk)$",
+    r"^id_(rsa|dsa|ecdsa|ed25519)(_sk)?(\.pub)?$", r"^\.(npmrc|pypirc|netrc|git-credentials)$",
+    r"^settings\.local\.json$", r"^mcp\.json$", r"^\.claude\.json$")]
+SAFE_NAMES = [re.compile(p, re.I) for p in (r"^\.env\.(example|sample|template)$",)]
 
 READ_ONLY_GIT = {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "describe", "blame",
                  "grep", "shortlog", "cat-file", "rev-list", "merge-base", "name-rev", "for-each-ref"}
@@ -85,7 +99,22 @@ def safe_rel(rel: str | None) -> str:
     parts = [p for p in r.split("\\") if p not in ("", ".")]
     if any(p == ".." for p in parts):
         raise UsageError(f"path must not leave the checkout: {rel!r}")
+    # Windows drops trailing dots and spaces and resolves 8.3 short names (SECRET~1.JSO), so a name could
+    # reach a different file than the one the local checks saw.
+    if any(p.endswith((".", " ")) or re.search(r"~\d", p) for p in parts):
+        raise UsageError(f"path segments may not end in a dot or space or be 8.3 short names: {rel!r}")
     return "\\".join(parts)
+
+
+def check_readable(rel: str) -> None:
+    """Refuse files that look like secrets or machine-local settings, and anything under .git or .ssh."""
+    parts = rel.split("\\")
+    for part in parts:
+        if part.lower() in SECRET_DIRS:
+            raise UsageError(f"refused {rel!r}: {part} is not readable through this helper")
+    name = parts[-1]
+    if not any(p.match(name) for p in SAFE_NAMES) and any(p.match(name) for p in SECRET_NAMES):
+        raise UsageError(f"refused {rel!r}: it looks like a secret or machine-local settings file")
 
 
 def check_git_args(args: list[str]) -> list[str]:
@@ -187,7 +216,10 @@ def save_cache(path: Path, cache: dict) -> None:
 
 
 def ps_quote(s: str) -> str:
-    return "'" + s.replace("'", "''") + "'"
+    """A PowerShell expression that evaluates to s. The text is embedded as base64, because a single-quoted
+    literal is also closed by U+2018..U+201B, which would let a path or argument run code on the peer."""
+    b64 = base64.b64encode(str(s).encode("utf-8")).decode("ascii")
+    return f"([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}')))"
 
 
 def encode(script: str) -> str:
@@ -198,6 +230,9 @@ def encode(script: str) -> str:
 
 
 PRELUDE = "$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
+# The only text on the remote command line: read the real script from stdin (base64 UTF-8) and run it.
+BOOT = ("$s=[Console]::In.ReadToEnd();"
+        "& ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($s.Trim()))))")
 
 
 def guard(path: str, roots: list[str]) -> str:
@@ -271,15 +306,32 @@ def resolve_peer(arg: str | None, cfg: dict) -> str:
     return peer
 
 
-def ssh(peer: str, script: str, stdin: bytes | None = None, timeout: int = 120, capture: bool = True):
-    cmd = ["ssh", *SSH_OPTS, peer, "powershell -NoProfile -NonInteractive -EncodedCommand " + encode(script)]
+def ssh_argv(peer: str) -> list[str]:
+    return ["ssh", *SSH_OPTS, peer, "powershell -NoProfile -NonInteractive -EncodedCommand " + encode(BOOT)]
+
+
+def ssh(peer: str, script: str, timeout: int = 120, capture: bool = True):
+    # The script goes on stdin, which then closes, so a nested ssh inside the session can't wait on it.
     try:
-        # Without input, close stdin: a nested ssh inside an SSH session otherwise waits on it forever.
-        if stdin is None:
-            return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=capture, timeout=timeout)
-        return subprocess.run(cmd, input=stdin, capture_output=capture, timeout=timeout)
+        return subprocess.run(ssh_argv(peer), input=base64.b64encode(script.encode("utf-8")),
+                              capture_output=capture, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise UsageError(f"ssh to {peer} timed out after {timeout}s")
+
+
+def agent_body(harness: str, allow_edits: bool, prompt: str) -> str:
+    """PowerShell that pipes the prompt (embedded as base64) into a headless agent in the checkout ($c)."""
+    if harness == "claude":
+        cmd = "& claude -p --output-format text " + (
+            "--permission-mode acceptEdits" if allow_edits else " ".join(CLAUDE_READ_ONLY))
+    elif harness == "codex":
+        cmd = "& codex exec -C $c -s " + ("workspace-write" if allow_edits else "read-only") + " -"
+    else:
+        raise UsageError(f"unknown harness {harness!r}")
+    return ("$OutputEncoding=[Text.Encoding]::UTF8;"
+            f"if(-not(Get-Command {harness} -ErrorAction SilentlyContinue)){{"
+            f"[Console]::Error.WriteLine('{harness} is not on PATH in the ssh session');exit 5}};"
+            f"{ps_quote(prompt)}|{cmd};exit $LASTEXITCODE")
 
 
 def clean_err(b: bytes) -> str:
@@ -308,10 +360,10 @@ def locate(peer: str, local: dict, cfg: dict, path: str | None) -> dict:
 
 # ---------------------------------------------------------------- commands
 
-def run_payload(peer: str, target: dict, local: dict, body: str, stdin: bytes | None = None,
+def run_payload(peer: str, target: dict, local: dict, body: str,
                 timeout: int = 120, stream: bool = False, retry: bool = False) -> int:
     script = guard(target["path"], local["roots"]) + body
-    r = ssh(peer, script, stdin=stdin, timeout=timeout, capture=not stream)
+    r = ssh(peer, script, timeout=timeout, capture=not stream)
     if retry and r.returncode == EXIT_IDENTITY:
         return r.returncode  # the caller searches again; nothing ran
     if not stream:
@@ -339,14 +391,16 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status", help="branch, HEAD and git status on the peer, compared with this checkout")
     p = sub.add_parser("ls", help="list a folder inside the peer checkout")
     p.add_argument("rel", nargs="?", default="")
-    p = sub.add_parser("cat", help="print a text file inside the peer checkout")
+    p = sub.add_parser("cat", help="print a text file inside the peer checkout (secret-looking files refused)")
     p.add_argument("rel")
     p.add_argument("--max-bytes", type=int, default=200_000)
     p = sub.add_parser("git", help="a read-only git subcommand in the peer checkout")
     p.add_argument("args", nargs=argparse.REMAINDER)
-    p = sub.add_parser("agent", help="run headless Claude Code in the peer checkout; prompt goes on stdin")
+    p = sub.add_parser("agent", help="run a headless agent in the peer checkout, read-only unless --allow-edits")
     p.add_argument("--prompt-file", required=True)
-    p.add_argument("--allow-edits", action="store_true", help="acceptEdits instead of plan mode; needs the user's approval")
+    p.add_argument("--harness", choices=("claude", "codex"), default="claude")
+    p.add_argument("--allow-edits", action="store_true",
+                   help="claude acceptEdits / codex workspace-write instead of read-only; needs the user's approval")
     p.add_argument("--timeout", type=int, default=1800)
     a = ap.parse_args(argv)
 
@@ -406,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
             rel = safe_rel(a.rel)
             if not rel:
                 raise UsageError("cat needs a file path")
+            check_readable(rel)
             return with_target(lambda t, retry: run_payload(peer, t, local, inside(rel) +
                                f"$b=[IO.File]::ReadAllBytes($p);$n=[Math]::Min($b.Length,{int(a.max_bytes)});"
                                "[Console]::Out.Write([Text.Encoding]::UTF8.GetString($b,0,$n));"
@@ -415,15 +470,9 @@ def main(argv: list[str] | None = None) -> int:
             return with_target(lambda t, retry: run_payload(peer, t, local, "$env:GIT_PAGER='cat';& git --no-pager " +
                                " ".join(ps_quote(x) for x in args), retry=retry))
         if a.cmd == "agent":
-            prompt = Path(a.prompt_file).read_bytes()
-            mode = "acceptEdits" if a.allow_edits else "plan"
-            body = ("[Console]::InputEncoding=[Text.Encoding]::UTF8;$OutputEncoding=[Text.Encoding]::UTF8;"
-                    "$in=[Console]::In.ReadToEnd();"
-                    "if(-not(Get-Command claude -ErrorAction SilentlyContinue)){"
-                    "[Console]::Error.WriteLine('claude is not on PATH in the ssh session');exit 5};"
-                    f"$in|& claude -p --permission-mode {mode} --output-format text;exit $LASTEXITCODE")
-            print(f"[{peer} mode={mode}]", file=sys.stderr, flush=True)
-            return with_target(lambda t, retry: run_payload(peer, t, local, body, stdin=prompt, timeout=a.timeout, retry=retry))
+            body = agent_body(a.harness, a.allow_edits, Path(a.prompt_file).read_text(encoding="utf-8"))
+            print(f"[{peer} {a.harness} {'edits allowed' if a.allow_edits else 'read-only'}]", file=sys.stderr, flush=True)
+            return with_target(lambda t, retry: run_payload(peer, t, local, body, timeout=a.timeout, retry=retry))
     except UsageError as e:
         print(f"cross_pc_ssh: {e}", file=sys.stderr)
         return 2

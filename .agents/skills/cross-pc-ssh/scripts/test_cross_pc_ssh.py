@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import os
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -42,6 +45,29 @@ class SafeRel(unittest.TestCase):
                     "\\x", "file.txt:stream", "*.md", "a\x00b", "a|b"]:
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.safe_rel(bad)
+
+    def test_rejects_names_windows_would_rewrite(self):
+        for bad in [".env.", "secrets.json.", "SECRETS.JSON...", ".git.\\config", "SECRET~1.JSO",
+                    "docs\\PROGRA~1\\x", "a\\b \\c", "..."]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.safe_rel(bad)
+
+
+class Readable(unittest.TestCase):
+    def test_secret_looking_files_refused(self):
+        for bad in [".env", ".env.local", "config\\secrets.json", ".git\\config", "x\\.ssh\\known_hosts",
+                    "id_ed25519", "deploy.PEM", ".npmrc", ".claude\\settings.local.json", ".cursor\\mcp.json"]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_readable(bad)
+
+    def test_outer_spaces_are_stripped_before_the_check(self):
+        with self.assertRaises(cps.UsageError):
+            cps.check_readable(cps.safe_rel(".env "))
+
+    def test_ordinary_files_allowed(self):
+        for ok in ["README.md", ".env.example", "docs\\secret-handling.md", "src\\keys.py", ".gitignore"]:
+            with self.subTest(ok=ok):
+                cps.check_readable(ok)
 
 
 class GitArgs(unittest.TestCase):
@@ -140,18 +166,42 @@ class Cache(unittest.TestCase):
             self.assertEqual(cps.load_cache(path), {})
 
 
+TRICKY = ["it's", "a\u2018b\u2019c\u201ad\u201be", "$(Write-Host x)", "`n`$x", "\u2192 \u00e9 \u041f\u0440\u0438\u0432\u0435\u0442", ""]
+
+
 class RemoteScripts(unittest.TestCase):
-    def test_quote_and_encode(self):
-        self.assertEqual(cps.ps_quote("it's"), "'it''s'")
+    def test_quote_embeds_base64_only(self):
+        for s in TRICKY:
+            with self.subTest(s=s):
+                q = cps.ps_quote(s)
+                b64 = q.split("'")[1]
+                self.assertEqual(q, f"([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}')))")
+                self.assertEqual(base64.b64decode(b64).decode("utf-8"), s)
+
+    def test_encode(self):
         text = base64.b64decode(cps.encode("Get-Date")).decode("utf-16-le")
         self.assertEqual(text, "Get-Date")
 
-    def test_guard_and_locate_fit_cmd_line(self):
+    def test_command_line_is_fixed_bootstrap(self):
+        argv = cps.ssh_argv("laptop")
+        self.assertEqual(argv[:-1], ["ssh", *cps.SSH_OPTS, "laptop"])
+        self.assertLess(len(argv[-1]), cps.MAX_ENCODED)
         g = cps.guard("E:\\src\\o'neil", ["a" * 40, "b" * 40])
-        self.assertIn("'E:\\src\\o''neil'", g)
+        self.assertIn(cps.ps_quote("E:\\src\\o'neil"), g)
         self.assertIn(f"exit {cps.EXIT_IDENTITY}", g)
-        cps.encode(g + cps.inside("docs\\deep\\file.md") + "Get-ChildItem")
-        cps.encode(cps.LOCATE % "'E:\\src'")
+
+    def test_agent_read_only_by_default(self):
+        body = cps.agent_body("claude", False, "do not edit")
+        self.assertIn(" ".join(cps.CLAUDE_READ_ONLY), body)
+        self.assertIn("--tools Read,Grep,Glob", body)
+        self.assertIn("--strict-mcp-config", body)
+        self.assertNotIn("acceptEdits", body)
+        self.assertNotIn("do not edit", body)  # the prompt is embedded as base64
+        self.assertIn("--permission-mode acceptEdits", cps.agent_body("claude", True, "x"))
+        self.assertIn("-s read-only -", cps.agent_body("codex", False, "x"))
+        self.assertIn("-s workspace-write -", cps.agent_body("codex", True, "x"))
+        with self.assertRaises(cps.UsageError):
+            cps.agent_body("other", False, "x")
 
     def test_too_long_refused(self):
         with self.assertRaises(cps.UsageError):
@@ -163,6 +213,36 @@ class RemoteScripts(unittest.TestCase):
         for bad in ["-oProxyCommand=x", "a b", "a;b", ""]:
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.resolve_peer(bad or None, {})
+
+
+@unittest.skipUnless(os.name == "nt" and shutil.which("powershell"), "needs Windows PowerShell")
+class LocalPowerShell(unittest.TestCase):
+    """Runs the remote scripts in local Windows PowerShell through the same stdin bootstrap ssh uses."""
+
+    def run_ps(self, script: str) -> tuple[int, str]:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", cps.encode(cps.BOOT)],
+                           input=base64.b64encode((cps.PRELUDE + script).encode("utf-8")), capture_output=True,
+                           timeout=60)
+        return r.returncode, r.stdout.decode("utf-8", "replace")
+
+    def test_strings_round_trip(self):
+        for s in TRICKY:
+            with self.subTest(s=s):
+                code, out = self.run_ps("[Console]::Out.Write(" + cps.ps_quote(s) + ")")
+                self.assertEqual((code, out), (0, s))
+
+    def test_unicode_quotes_in_a_path_do_not_run_code(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            for q in "\u2018\u2019\u201a\u201b'":
+                rel = cps.safe_rel("a" + q + "+(Write-Host INJECTED)+" + q)
+                with self.subTest(q=hex(ord(q))):
+                    code, out = self.run_ps("$c=" + cps.ps_quote(d) + ";" + cps.inside(rel) + "'reached'")
+                    self.assertNotIn("INJECTED", out)
+                    self.assertNotEqual(code, 0)  # the odd name simply does not exist
+
+    def test_exit_code_survives_bootstrap(self):
+        self.assertEqual(self.run_ps("exit 3")[0], 3)
 
 
 if __name__ == "__main__":

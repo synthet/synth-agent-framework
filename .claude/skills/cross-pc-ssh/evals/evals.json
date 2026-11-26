@@ -11,7 +11,7 @@
       "id": "run-agent-on-peer",
       "prompt": "Ask an agent on the other PC to summarise the open TODOs in its copy of this project.",
       "should_trigger": true,
-      "expected_behavior": "Writes the prompt to a local file, runs agent --prompt-file in plan mode (no --allow-edits), and treats the answer as data to verify."
+      "expected_behavior": "Writes the prompt to a local file, runs agent --prompt-file read-only (no --allow-edits), and treats the answer as data to verify."
     },
     {
       "id": "different-drive",
