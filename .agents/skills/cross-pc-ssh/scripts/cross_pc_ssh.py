@@ -322,15 +322,17 @@ def ssh(peer: str, script: str, timeout: int = 120, capture: bool = True):
 def agent_body(harness: str, allow_edits: bool, prompt: str) -> str:
     """PowerShell that pipes the prompt (embedded as base64) into a headless agent in the checkout ($c)."""
     if harness == "claude":
-        cmd = "& claude -p --output-format text " + (
+        cmd = "& $x -p --output-format text " + (
             "--permission-mode acceptEdits" if allow_edits else " ".join(CLAUDE_READ_ONLY))
     elif harness == "codex":
-        cmd = "& codex exec -C $c -s " + ("workspace-write" if allow_edits else "read-only") + " -"
+        cmd = "& $x exec -C $c -s " + ("workspace-write" if allow_edits else "read-only") + " -"
     else:
         raise UsageError(f"unknown harness {harness!r}")
+    # Applications only (.exe/.cmd): an npm .ps1 shim is blocked by the default execution policy, and the
+    # error would not change PowerShell's exit code.
     return ("$OutputEncoding=[Text.Encoding]::UTF8;"
-            f"if(-not(Get-Command {harness} -ErrorAction SilentlyContinue)){{"
-            f"[Console]::Error.WriteLine('{harness} is not on PATH in the ssh session');exit 5}};"
+            f"$x=(Get-Command {harness} -CommandType Application -ErrorAction SilentlyContinue|Select-Object -First 1).Source;"
+            f"if(-not $x){{[Console]::Error.WriteLine('{harness} is not on PATH in the ssh session');exit 5}};"
             f"{ps_quote(prompt)}|{cmd};exit $LASTEXITCODE")
 
 

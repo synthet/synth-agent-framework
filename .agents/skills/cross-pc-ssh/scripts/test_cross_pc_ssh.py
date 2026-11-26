@@ -200,6 +200,7 @@ class RemoteScripts(unittest.TestCase):
         self.assertIn("--permission-mode acceptEdits", cps.agent_body("claude", True, "x"))
         self.assertIn("-s read-only -", cps.agent_body("codex", False, "x"))
         self.assertIn("-s workspace-write -", cps.agent_body("codex", True, "x"))
+        self.assertIn("-CommandType Application", cps.agent_body("codex", False, "x"))  # never the .ps1 shim
         with self.assertRaises(cps.UsageError):
             cps.agent_body("other", False, "x")
 
