@@ -103,6 +103,43 @@ class Choose(unittest.TestCase):
             cps.choose(LOCAL, [cand("E:\\src\\widget", roots=("b" * 40,))], path="E:\\src\\widget")
 
 
+class Cache(unittest.TestCase):
+    LOCAL = {"slug": "github.com/acme/widget", "origin": "https://github.com/acme/widget.git",
+             "roots": ["a" * 40], "path": "E:/src/widget"}
+
+    def test_remember_recall_forget(self):
+        cache = {}
+        cps.remember(cache, self.LOCAL, "laptop", "F:\\code\\widget", "2026-01-01T00:00:00+00:00")
+        entry = cache["github.com/acme/widget"]
+        self.assertEqual((entry["github"], entry["local"], entry["root"]),
+                         ("https://github.com/acme/widget.git", "E:/src/widget", "a" * 40))
+        self.assertEqual(cps.recall(cache, self.LOCAL, "laptop"), "F:\\code\\widget")
+        self.assertIsNone(cps.recall(cache, self.LOCAL, "desk"))
+        cps.forget(cache, self.LOCAL, "laptop")
+        self.assertIsNone(cps.recall(cache, self.LOCAL, "laptop"))
+
+    def test_entry_with_other_root_is_ignored(self):
+        cache = {}
+        cps.remember(cache, self.LOCAL, "laptop", "F:\\code\\widget", "t")
+        other = dict(self.LOCAL, roots=["b" * 40])
+        self.assertIsNone(cps.recall(cache, other, "laptop"))
+
+    def test_key_falls_back_to_root_without_origin(self):
+        self.assertEqual(cps.cache_key(dict(self.LOCAL, slug=None)), "root:" + "a" * 40)
+
+    def test_file_roundtrip_and_damaged_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "sub" / "locations.json"
+            self.assertEqual(cps.load_cache(path), {})
+            cache = {}
+            cps.remember(cache, self.LOCAL, "laptop", "F:\\code\\widget", "t")
+            cps.save_cache(path, cache)
+            self.assertEqual(cps.recall(cps.load_cache(path), self.LOCAL, "laptop"), "F:\\code\\widget")
+            path.write_text("{not json", encoding="utf-8")
+            self.assertEqual(cps.load_cache(path), {})
+
+
 class RemoteScripts(unittest.TestCase):
     def test_quote_and_encode(self):
         self.assertEqual(cps.ps_quote("it's"), "'it''s'")

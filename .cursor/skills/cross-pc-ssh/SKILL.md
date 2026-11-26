@@ -31,6 +31,12 @@ Search roots on the peer come from that file (`{"peers": {"<alias>": {"roots": [
 else every fixed drive's `Projects` folder and the remote user's `Projects`. Pass `--path` only when
 `locate` reports several equal matches; the chosen path is still verified.
 
+Found locations are cached in `~/.cache/cross-pc-ssh/locations.json` (or `CROSS_PC_SSH_CACHE`), one entry per
+repository keyed by its normalized GitHub origin (root commit when there is none), holding the origin, the local
+path and each peer's path. A cached path is used directly; the identity check still runs on every call, and when
+the path is gone or no longer this repository (renamed, moved, re-cloned) the helper searches once, updates the
+entry and reruns. `locate --rescan` forces a search. The cache holds machine paths: keep it out of repos.
+
 ## Before the first remote command
 
 1. `ssh -n -o BatchMode=yes <alias> hostname` must print the peer's name. If it asks for a password or

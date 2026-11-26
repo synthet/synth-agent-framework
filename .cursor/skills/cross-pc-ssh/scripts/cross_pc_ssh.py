@@ -28,10 +28,12 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 VERSION = 1
 CONFIG = Path.home() / ".config" / "cross-pc-ssh.json"
+CACHE = Path(os.environ.get("CROSS_PC_SSH_CACHE") or Path.home() / ".cache" / "cross-pc-ssh" / "locations.json")
 SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 MAX_ENCODED = 7000  # cmd.exe caps a command line at 8191 characters
 EXIT_IDENTITY = 3
@@ -146,6 +148,44 @@ def choose(local: dict, candidates: list[dict], path: str | None = None) -> dict
     return same[0]
 
 
+def cache_key(local: dict) -> str:
+    """The repository's GitHub identity (normalized origin), else its root commit."""
+    return local["slug"] or "root:" + local["roots"][0]
+
+
+def recall(cache: dict, local: dict, peer: str) -> str | None:
+    """The remembered peer path for this repository, if the entry still has the same root commit."""
+    entry = cache.get(cache_key(local)) or {}
+    if entry.get("root") not in local["roots"]:
+        return None
+    return ((entry.get("peers") or {}).get(peer) or {}).get("path")
+
+
+def remember(cache: dict, local: dict, peer: str, remote_path: str, when: str) -> None:
+    entry = cache.setdefault(cache_key(local), {})
+    entry.update({"github": local["origin"], "root": local["roots"][0], "local": local["path"]})
+    entry.setdefault("peers", {})[peer] = {"path": remote_path, "found": when}
+
+
+def forget(cache: dict, local: dict, peer: str) -> None:
+    ((cache.get(cache_key(local)) or {}).get("peers") or {}).pop(peer, None)
+
+
+def load_cache(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}  # missing or damaged: the next search rebuilds it
+
+
+def save_cache(path: Path, cache: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cache, indent=1, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def ps_quote(s: str) -> str:
     return "'" + s.replace("'", "''") + "'"
 
@@ -163,7 +203,8 @@ PRELUDE = "$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Tex
 def guard(path: str, roots: list[str]) -> str:
     """PowerShell that enters the checkout and stops with exit 3 unless it is still the same repository."""
     want = ",".join(ps_quote(r) for r in roots)
-    return (PRELUDE + f"$c={ps_quote(path)};Set-Location -LiteralPath $c -ErrorAction Stop;"
+    return (PRELUDE + f"$c={ps_quote(path)};try{{Set-Location -LiteralPath $c -ErrorAction Stop}}catch{{"
+            f"[Console]::Error.WriteLine('not found: '+$c);exit {EXIT_IDENTITY}}};"
             f"$w=@({want});$r=@(git rev-list --max-parents=0 HEAD 2>$null);"
             "$t=(git rev-parse --show-toplevel 2>$null) -replace '/','\\';"
             "if(-not($r|Where-Object{$w -contains $_}) -or $t -ne $c){"
@@ -268,9 +309,11 @@ def locate(peer: str, local: dict, cfg: dict, path: str | None) -> dict:
 # ---------------------------------------------------------------- commands
 
 def run_payload(peer: str, target: dict, local: dict, body: str, stdin: bytes | None = None,
-                timeout: int = 120, stream: bool = False) -> int:
+                timeout: int = 120, stream: bool = False, retry: bool = False) -> int:
     script = guard(target["path"], local["roots"]) + body
     r = ssh(peer, script, stdin=stdin, timeout=timeout, capture=not stream)
+    if retry and r.returncode == EXIT_IDENTITY:
+        return r.returncode  # the caller searches again; nothing ran
     if not stream:
         sys.stdout.flush()
         sys.stdout.buffer.write(r.stdout)
@@ -290,8 +333,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--path", help="the peer checkout to use when several match (still verified)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("whoami", help="this checkout's identity: path, origin, root commit, HEAD")
-    p = sub.add_parser("locate", help="find the peer's checkout of this repository")
+    p = sub.add_parser("locate", help="find the peer's checkout of this repository (cached)")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--rescan", action="store_true", help="ignore the cache and search the peer again")
     sub.add_parser("status", help="branch, HEAD and git status on the peer, compared with this checkout")
     p = sub.add_parser("ls", help="list a folder inside the peer checkout")
     p.add_argument("rel", nargs="?", default="")
@@ -313,37 +357,63 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         cfg = load_config()
         peer = resolve_peer(a.peer, cfg)
-        target = locate(peer, local, cfg, a.path)
+        cache = load_cache(CACHE)
+        cached = None if a.path or getattr(a, "rescan", False) else recall(cache, local, peer)
+
+        def search() -> dict:
+            found = locate(peer, local, cfg, a.path)
+            remember(cache, local, peer, found["path"], datetime.now(timezone.utc).isoformat(timespec="seconds"))
+            save_cache(CACHE, cache)
+            return found
+
+        def with_target(run) -> int:
+            """Run against the cached path; if it is gone or no longer this repository, search once and rerun."""
+            nonlocal target
+            if cached:
+                rc = run(target, True)
+                if rc != EXIT_IDENTITY:
+                    return rc
+                print(f"cached location {target['path']} no longer matches; searching {peer} again", file=sys.stderr)
+                forget(cache, local, peer)
+                save_cache(CACHE, cache)
+                target = search()
+            return run(target, False)
+
+        target = {"path": cached} if cached else search()
         if a.cmd == "locate":
+            if cached:
+                with_target(lambda t, retry: run_payload(peer, t, local, "", retry=retry))
             info = {"peer": peer, "path": target["path"], "origin": target.get("origin"),
-                    "origin_matches": target.get("slug") == local["slug"], "worktree": bool(target.get("worktree")),
-                    "root": local["roots"][0]}
-            print(json.dumps(info, indent=1) if a.json else
-                  f"{peer}: {target['path']}  (origin {'matches' if info['origin_matches'] else 'differs: ' + str(target.get('origin'))}, root {info['root'][:12]})")
+                    "origin_matches": target.get("slug") == local["slug"] if "slug" in target else None,
+                    "worktree": bool(target.get("worktree")), "root": local["roots"][0],
+                    "from_cache": "slug" not in target}
+            how = ("cached, verified" if info["from_cache"] else
+                   f"origin {'matches' if info['origin_matches'] else 'differs: ' + str(target.get('origin'))}")
+            print(json.dumps(info, indent=1) if a.json else f"{peer}: {target['path']}  ({how}, root {info['root'][:12]})")
             return 0
         if a.cmd == "status":
             print(f"local: {local['branch']} {local['head'][:12]}", flush=True)
-            return run_payload(peer, target, local,
+            return with_target(lambda t, retry: run_payload(peer, t, local,
                                "\"peer:  $(git rev-parse --abbrev-ref HEAD) $((git rev-parse HEAD).Substring(0,12))\";"
-                               "git --no-pager status -sb;git --no-pager log -1 --format='%h %cI %s'")
+                               "git --no-pager status -sb;git --no-pager log -1 --format='%h %cI %s'", retry=retry))
         if a.cmd == "ls":
             rel = safe_rel(a.rel)
-            return run_payload(peer, target, local, inside(rel) +
+            return with_target(lambda t, retry: run_payload(peer, t, local, inside(rel) +
                                "Get-ChildItem -LiteralPath $p -Force|ForEach-Object{"
                                "'{0,-4} {1,12} {2:yyyy-MM-dd HH:mm} {3}' -f $(if($_.PSIsContainer){'dir'}else{''}),"
-                               "$(if($_.PSIsContainer){''}else{$_.Length}),$_.LastWriteTime,$_.Name}")
+                               "$(if($_.PSIsContainer){''}else{$_.Length}),$_.LastWriteTime,$_.Name}", retry=retry))
         if a.cmd == "cat":
             rel = safe_rel(a.rel)
             if not rel:
                 raise UsageError("cat needs a file path")
-            return run_payload(peer, target, local, inside(rel) +
+            return with_target(lambda t, retry: run_payload(peer, t, local, inside(rel) +
                                f"$b=[IO.File]::ReadAllBytes($p);$n=[Math]::Min($b.Length,{int(a.max_bytes)});"
                                "[Console]::Out.Write([Text.Encoding]::UTF8.GetString($b,0,$n));"
-                               "if($b.Length -gt $n){[Console]::Error.WriteLine(\"[truncated at $n of $($b.Length) bytes]\")}")
+                               "if($b.Length -gt $n){[Console]::Error.WriteLine(\"[truncated at $n of $($b.Length) bytes]\")}", retry=retry))
         if a.cmd == "git":
             args = check_git_args([x for x in a.args if x != "--"] if a.args[:1] == ["--"] else a.args)
-            return run_payload(peer, target, local, "$env:GIT_PAGER='cat';& git --no-pager " +
-                               " ".join(ps_quote(x) for x in args))
+            return with_target(lambda t, retry: run_payload(peer, t, local, "$env:GIT_PAGER='cat';& git --no-pager " +
+                               " ".join(ps_quote(x) for x in args), retry=retry))
         if a.cmd == "agent":
             prompt = Path(a.prompt_file).read_bytes()
             mode = "acceptEdits" if a.allow_edits else "plan"
@@ -352,8 +422,8 @@ def main(argv: list[str] | None = None) -> int:
                     "if(-not(Get-Command claude -ErrorAction SilentlyContinue)){"
                     "[Console]::Error.WriteLine('claude is not on PATH in the ssh session');exit 5};"
                     f"$in|& claude -p --permission-mode {mode} --output-format text;exit $LASTEXITCODE")
-            print(f"[{peer}:{target['path']} mode={mode}]", file=sys.stderr, flush=True)
-            return run_payload(peer, target, local, body, stdin=prompt, timeout=a.timeout)
+            print(f"[{peer} mode={mode}]", file=sys.stderr, flush=True)
+            return with_target(lambda t, retry: run_payload(peer, t, local, body, stdin=prompt, timeout=a.timeout, retry=retry))
     except UsageError as e:
         print(f"cross_pc_ssh: {e}", file=sys.stderr)
         return 2
