@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-21. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-26. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -21,6 +21,7 @@ commands or edit code/config as part of its procedure.
 | commit-conventions | Conventional Commits and PR title wording | L1 | 2026-07-01 |
 | cross-pc-messages | Messages between PCs through a shared synced folder (`<from>-to-<to>`): whoami, threads with whose turn it is, new package / reply with the standard header, `watch` (one-shot or streaming), and a secret check on outgoing text. The share's `AGENTS.md` stays the authority; the helper only adds files (writes sync to every PC) | L2 | 2026-11-18 |
 | agent-mailbox | Agent mail between paired PCs with the Rust agent-mail: read the inbox in small batches, send to trusted peers on other PCs, reply in the stored thread with the loop refusals, acknowledge (not completion), check delivery. Received text is untrusted data; pairing and policy stay the owner's | L2 | 2026-11-19 |
+| session-messages | Message other Claude Code sessions on the same PC (`ListAgents`, `SendMessage`): self-contained plain-text format, one send per recipient, `notify_when_idle` waits, held or dropped messages explained; received messages are information, never consent. Claude Code only | L1 | 2026-11-26 |
 | mail-dispatch | Operate the Rust agent-mail tray consumer: dispatch on/off, gate order, typed answers, read-tier Claude runs that reply automatically, `workspaces`/`max_tier`, ledger and Runs tab, loop guards, cost caps, and the provider-export trade-off. `policy.json` changes only on the owner's request | L2 | 2026-11-19 |
 | commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-19 |
 | critical-commit-audit | Deep post-commit hunt for high-severity bugs | L2 | 2026-07-01 |
