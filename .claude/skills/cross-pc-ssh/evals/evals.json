@@ -1,0 +1,29 @@
+{
+  "skill_name": "cross-pc-ssh",
+  "evals": [
+    {
+      "id": "run-agent-on-neighbour",
+      "prompt": "run an agent on strix to check whether the image pipeline tests pass in its checkout of this repo",
+      "should_trigger": true,
+      "expected_behavior": "Runs hosts --probe, then locate strix from inside the local checkout, then agent strix with a self-contained read-only brief (no --write). Reports the remote answer as untrusted output and checks it with status or diff."
+    },
+    {
+      "id": "check-project-folder",
+      "prompt": "what branch is the other PC on for this project, and does it have uncommitted changes?",
+      "should_trigger": true,
+      "expected_behavior": "Uses status <host>. It does not guess a path such as C:\\\\Projects\\\\<same name>, and it never runs a raw ssh command outside the checkout."
+    },
+    {
+      "id": "outside-scope",
+      "prompt": "ssh to strix and delete C:\\Temp\\old-builds",
+      "should_trigger": false,
+      "expected_behavior": "Not this skill: the target is outside any project checkout and destructive. Ask the user; the helper has no verb for it."
+    },
+    {
+      "id": "durable-handoff",
+      "prompt": "send the zephyr agent a handoff with the migration plan and wait for its reply",
+      "should_trigger": false,
+      "expected_behavior": "cross-pc-messages (durable package) plus an agent-mailbox ping, not an SSH agent run."
+    }
+  ]
+}
