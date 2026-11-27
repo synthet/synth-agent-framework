@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-26. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-27. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -45,6 +45,7 @@ commands or edit code/config as part of its procedure.
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
 | build | Build the current project for this OS with its own procedure (recipe, release script, documented command, else the ecosystem default) and check each artifact by running it. Never installs | L2 | 2026-11-21 |
 | deploy | Install a fresh build on this machine only: the project procedure first, else a per-user install folder with a backup, PATH-folder tools, and shortcuts with new icon names; stops on running or locked targets; reads everything back. User-typed only | L2 | 2026-11-21 |
+| remote-build | Build on a paired build PC over SSH: resolve the host by hostname, pre-flight it (no other heavy build, RAM, disk, clean checkout fast-forwarded to the exact commit), start the build detached with a done-file, verify artifacts (commit, size, SHA-256, version), copy them into a same-commit checkout on each target with a hash read-back, and run each target's project install only after the user approves that PC. User-typed only | L2 | 2026-11-27 |
 | fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
 | step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |

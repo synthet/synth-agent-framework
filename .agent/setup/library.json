@@ -512,6 +512,13 @@
       "projects": []
     },
     {
+      "id": "remote-build",
+      "source": ".claude/skills/remote-build",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "bg-status",
       "source": ".claude/skills/bg-status",
       "pack": "global",
