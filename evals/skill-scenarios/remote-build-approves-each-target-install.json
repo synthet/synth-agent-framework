@@ -1,0 +1,36 @@
+{
+  "id": "remote-build-approves-each-target-install",
+  "description": "Protect /remote-build: user-typed only; hosts resolved by hostname with a stable host-key alias; pre-flight refuses a dirty checkout or a second heavy build; the build runs detached with a done-file; artifacts are hashed and version-checked; copies are hash-verified on each target; each target install needs its own yes; no install that kills the hosting session; no edits to ssh config, sshd or firewall.",
+  "target_asset": ".claude/skills/remote-build/SKILL.md",
+  "linked_docs": [],
+  "must_contain": [
+    "disable-model-invocation: true",
+    "It does not\napprove installing: each target PC's install is its own yes",
+    "**By hostname, not IP.**",
+    "-o HostKeyAlias=<alias>",
+    "**A timeout is not proof the PC is down.**",
+    "-EncodedCommand <base64>",
+    "**No other heavy build running**",
+    "never stash or reset someone's work.",
+    "git pull --ff-only origin <default>",
+    "Invoke-CimMethod -ClassName Win32_Process -MethodName Create",
+    "Delete an old\n  done-file before starting",
+    "A copy that returned no error isn't proof.",
+    "wait for the user's yes for **that** PC.",
+    "don't run an install that replaces the app hosting this session",
+    "Use the procedure's no-restart option",
+    "Install on a PC the user didn't approve in this run",
+    "Edit `~/.ssh/config`, `known_hosts`, `sshd_config`, firewall rules or another PC's settings",
+    " Runs only when the user types /remote-build. For a build",
+    "Record its size and SHA-256 (`Get-FileHash`), and run its version or help flag.",
+    "which is the one write to\nthe build host's checkout",
+    "`ssh -n -o BatchMode=yes <host> hostname`"
+  ],
+  "must_not_contain": [
+    "side_effect_level: read_only",
+    "git stash",
+    "git reset --hard",
+    "StrictHostKeyChecking=no",
+    "or asks to build on another PC"
+  ]
+}
