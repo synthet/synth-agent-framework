@@ -4,15 +4,25 @@
 The share holds one-way folders named ``<from>-to-<to>``. Only the sender writes in its own outgoing
 folders. The share's own ``AGENTS.md`` is the protocol authority, and this script reads its host table.
 
-This script only ever ADDS files. It never deletes, moves or renames anything in the share, because
-every change syncs to every PC.
+Every command except `archive` only ADDS files: it never deletes, moves or renames anything in the share,
+because every change syncs to every PC. `archive` is the owner-approved exception: it is a dry run unless
+--apply, and it moves only this host's own finished threads out of its own <me>-to-<peer> folders.
+
+Thread names: a thread starts as <topic>-<date> (package folder or note); every follow-up in either
+direction is <topic>-<date>-<word>.md (reply, result, status, ack, done, fix, addendum, ...).
 
 Commands:
   whoami                      share root, this host, peers, incoming/outgoing folders
-  status [--since DAYS]       threads per peer (topic + its -reply/-result/... follow-ups); whose turn it is
+  status [--since DAYS]       threads per peer (topic + its -reply/-result/... follow-ups); whose turn it is;
+                              done threads only with --all
   new   --to PEER --topic T   package <T>-<date>/README.md (--note: one <T>-<date>.md). --print shows the
                               template only; --from-file DRAFT writes a checked local draft (atomic send)
-  reply --to PEER --re NAME   <topic>-<kind>.md (--kind reply|result|status|ack); --body-file DRAFT = atomic reply
+  reply --to PEER --re NAME   <topic>-<date>-<kind>.md (--kind reply|result|status|ack, or --suffix WORD);
+                              --body-file DRAFT = atomic reply. NAME may also be your own outgoing item
+  close --to PEER --re NAME   <topic>-<date>-done.md: the thread is finished (either side may close)
+  lint                        read-only: nonconforming names, root clutter, big files, unknown hosts; exit 1
+  archive [--apply]           dry run: this host's done (or --older-than N days idle) threads; --apply moves
+                              them to private/archive/cross-pc/ with a manifest
   watch [--once]              print NEW:/CHANGED: lines for incoming files; --once exits on the first event
   check PATH...               flag secrets and unfilled placeholders before you send
   manifest                    print SHA256SUMS for this skill copy (writes nothing)
@@ -34,7 +44,7 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = "2"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
+VERSION = "3"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
 SKILL_DIR = Path(__file__).resolve().parents[1]
 RELEASES = Path("private/guides/cross-pc-messages")  # relative to the share root
 # Global skill trees, as installed by the framework's agent_setup.py.
@@ -43,6 +53,17 @@ PAIR = re.compile(r"^([a-z0-9][a-z0-9-]*?)-to-([a-z0-9][a-z0-9-]*)$")
 HOST_ROW = re.compile(r"^\|\s*`([a-z0-9][a-z0-9-]*)`\s*\|\s*([^|]+?)\s*\|")
 TOPIC = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 REPLY_KINDS = ("reply", "result", "status", "ack")
+DATE = r"\d{4}-\d{2}-\d{2}"
+WORD = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+# <topic>-<date>[-<suffix>]: the topic is everything before the first date.
+NAME = re.compile(rf"^({WORD}?)-({DATE})(?:-({WORD}))?$")
+LEGACY_BEFORE_DATE = re.compile(rf"^({WORD})-([a-z0-9]+)-({DATE})$")  # <base>-<word>-<date>, one word
+DATE_FIRST = re.compile(rf"^({DATE})-({WORD})$")
+# Words that mark a legacy <base>-<word>-<date> note as a follow-up of <base>-<date> rather than a new topic.
+FOLLOWUP_WORDS = {*REPLY_KINDS, "done", "fix", "addendum", "correction", "warning", "update", "notice", "followup"}
+ROOT_ALLOWED = {"AGENTS.md", "CLAUDE.md", "desktop.ini", ".sync", "private"}
+ARCHIVE = Path("private/archive/cross-pc")  # relative to the share root
+SETTLE_SECONDS = 600  # archive refuses threads with anything modified this recently
 # "Replies to:" links: <from>-to-<to>/<item>, where <item> ends at /, ), `, ], whitespace or end of line.
 REPLY_LINK = re.compile(r"([a-z0-9][a-z0-9-]*-to-[a-z0-9][a-z0-9-]*)/([^/)\]`\s]+)(?=[/)\]`\s]|$)")
 FYI_LINE = re.compile(r"(?im)^\s*-\s*\*\*Reply needed:\*\*\s*no\b")  # a header line, not a quote in prose
@@ -101,8 +122,8 @@ def find_root(arg: str | None) -> Path:
              + ". Set CROSS_PC_SHARE or pass --root.")
 
 
-def hosts(root: Path) -> dict[str, str]:
-    """Host table from the share's AGENTS.md, plus any host named only by a folder pair."""
+def host_table(root: Path) -> dict[str, str]:
+    """Host id -> machine, from the share's AGENTS.md table only."""
     found: dict[str, str] = {}
     agents = root / "AGENTS.md"
     if agents.is_file():
@@ -110,6 +131,12 @@ def hosts(root: Path) -> dict[str, str]:
             m = HOST_ROW.match(line)
             if m:
                 found[m.group(1)] = m.group(2)
+    return found
+
+
+def hosts(root: Path) -> dict[str, str]:
+    """Host table from the share's AGENTS.md, plus any host named only by a folder pair."""
+    found = host_table(root)
     for p in root.iterdir():
         m = PAIR.match(p.name) if p.is_dir() else None
         if m:
@@ -167,6 +194,69 @@ def stem(p: Path) -> str:
     return p.name[:-3] if p.name.endswith(".md") else p.name
 
 
+def parse_name(s: str) -> dict:
+    """Split a message stem into topic, date and follow-up suffix, and name its shape.
+
+    Shapes: base (<topic>-<date>), followup (<topic>-<date>-<word>), second-date (a date inside the suffix),
+    date-first (<date>-<topic>), undated (<topic>), uppercase, bad-name.
+    """
+    out = {"topic": "", "date": "", "suffix": "", "shape": "bad-name"}
+    if not re.match(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$", s):
+        return out
+    if s != s.lower():
+        return {**out, "shape": "uppercase"}
+    m = NAME.match(s)
+    if m:
+        suffix = m.group(3) or ""
+        shape = "second-date" if re.search(DATE, suffix) else ("followup" if suffix else "base")
+        return {"topic": m.group(1), "date": m.group(2), "suffix": suffix, "shape": shape}
+    m = DATE_FIRST.match(s)
+    if m:
+        return {"topic": m.group(2), "date": m.group(1), "suffix": "", "shape": "date-first"}
+    return {**out, "topic": s, "shape": "undated"}
+
+
+def thread_keyer(paths: list[Path]):
+    """Return a function mapping a message stem to its thread name, given every message of one peer pair.
+
+    1. A name that starts with an existing message's name plus `-` joins it (`x-2026-11-18-fix` -> `x-2026-11-18`).
+    2. Otherwise a `<topic>-<date>-<suffix>` name anchors at `<topic>-<date>`, even when that base is gone.
+    3. Legacy suffix-before-date: a note `<base>-<word>-<date>` joins an existing `<base>-<date>` thread
+       only as legacy_base() allows. A package folder is always a thread of its own.
+    """
+    stems = sorted({stem(p) for p in paths}, key=len)
+    known = set(stems)
+    legacy = {}
+    for p in paths:
+        base = legacy_base(p, known)
+        if base:
+            legacy[stem(p)] = base
+
+    def key(s: str) -> str:
+        r = next((x for x in stems if s == x or s.startswith(x + "-")), s)
+        if r == s:
+            n = parse_name(s)
+            if n["shape"] in ("followup", "second-date"):
+                r = f"{n['topic']}-{n['date']}"
+        return legacy.get(r, r)
+    return key
+
+
+def legacy_base(p: Path, known: set[str]) -> str | None:
+    """The `<base>-<date>` thread a legacy note `<base>-<word>-<date>.md` belongs to, or None.
+
+    Only when `<word>` is a follow-up word (FOLLOWUP_WORDS) or the note's "Replies to:" links the base:
+    a same-day topic that merely extends another one's name (`x-<other>-<date>`) stays its own thread.
+    """
+    m = LEGACY_BEFORE_DATE.match(stem(p)) if not p.is_dir() else None
+    if not m or f"{m.group(1)}-{m.group(3)}" not in known:
+        return None
+    base = f"{m.group(1)}-{m.group(3)}"
+    if m.group(2) in FOLLOWUP_WORDS:
+        return base
+    return base if base in {stem(Path(n)) for _, n in REPLY_LINK.findall(replies_field(header(p)))} else None
+
+
 # -- commands -----------------------------------------------------------------------------------
 
 def cmd_whoami(args) -> int:
@@ -186,42 +276,116 @@ def cmd_whoami(args) -> int:
     return 0
 
 
-def threads(c: dict, since_days: float | None) -> list[dict]:
-    """Group each peer's messages (both directions) into threads by topic prefix.
+def peer_messages(c: dict, peer: str) -> list[tuple[str, Path]]:
+    """("in" | "out", path) for every message between this host and one peer."""
+    inbox, outbox = c["incoming"].get(peer), c["outgoing"].get(peer)
+    msgs = [("in", p) for p in items(inbox)] if inbox else []
+    msgs += [("out", p) for p in items(outbox)] if outbox else []
+    return msgs
 
-    ``<topic>-reply.md``, ``<topic>-result.md`` and any other ``<topic>-<suffix>`` belong to ``<topic>``.
-    The thread's state comes from its newest message: from the peer means it's your turn.
+
+def thread_groups(c: dict, peer: str):
+    """thread name -> [(written, direction, name, fyi)] sorted oldest first, plus the stem -> thread keyer."""
+    inbox, outbox = c["incoming"].get(peer), c["outgoing"].get(peer)
+    msgs = peer_messages(c, peer)
+    key = thread_keyer([p for _, p in msgs])
+    own = {key(stem(p)) for _, p in msgs}
+    groups: dict[str, list] = {}
+    for d, p in msgs:
+        head = header(p)
+        entry = (written(p), d, p.name, bool(FYI_LINE.search(head)))
+        roots = {key(stem(p))}
+        other = (inbox if d == "out" else outbox)
+        if other is not None:
+            roots |= {key(stem(Path(name))) for pair, name in REPLY_LINK.findall(replies_field(head))
+                      if pair == other.name} & own
+        for r in roots:
+            groups.setdefault(r, []).append(entry)
+    for ms in groups.values():
+        ms.sort()
+    return groups, key
+
+
+def is_done(thread: str, ms: list) -> bool:
+    """A thread is done when its newest message is `<thread>-done.md`; any later message reopens it."""
+    return stem(Path(ms[-1][2])) == f"{thread}-done"
+
+
+def archive_dir(root: Path, pair: str, thread: str) -> Path:
+    """private/archive/cross-pc/<pair>/<topic>/ (an undated thread uses its own name as the topic).
+
+    Entries keep their names, which carry the date, so threads of a reused topic sit side by side.
+    """
+    n = parse_name(thread)
+    return root / ARCHIVE / pair / (n["topic"] if n["date"] else thread)
+
+
+def archive_marks(root: Path) -> dict[tuple[str, str], float]:
+    """(pair, thread) -> when the newest manifest that moved it was written."""
+    marks: dict[tuple[str, str], float] = {}
+    folder = root / ARCHIVE / "manifests"
+    for f in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            when = dt.datetime.fromisoformat(data["created"]).timestamp()
+            for m in data["moves"]:
+                pair = m["entries"][0]["new"].split("/")[3]  # private/archive/cross-pc/<pair>/...
+                marks[(pair, m["thread"])] = max(when, marks.get((pair, m["thread"]), 0.0))
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            continue
+    return marks
+
+
+def archived_at(c: dict, peer: str, thread: str, marks: dict) -> float | None:
+    """When a thread was archived (by either side), or None.
+
+    A thread is archived when its base sits in its archive folder. The time is the newest of its own archived
+    entries (renames keep file times) and the manifest that moved it, so a reply the peer left behind, older
+    than the archive run, doesn't revive it.
+    """
+    for pair in (f"{c['host']}-to-{peer}", f"{peer}-to-{c['host']}"):
+        d = archive_dir(c["root"], pair, thread)
+        own = [p for p in d.iterdir() if not ignored(p) and (stem(p) == thread or stem(p).startswith(thread + "-"))] \
+            if d.is_dir() else []
+        if any(stem(p) == thread for p in own):
+            return max([written(p) for p in own] + ([marks[(pair, thread)]] if (pair, thread) in marks else []))
+    return None
+
+
+def turn_state(ms: list, peer: str) -> str:
+    """Whose turn, from the newest message that needs a reply; fyi messages count only for activity."""
+    need = [m for m in ms if not m[3]]
+    if not need:
+        return "fyi"
+    return "your turn" if need[-1][1] == "in" else f"waiting on {peer}"
+
+
+def threads(c: dict, since_days: float | None, show_done: bool = False) -> list[dict]:
+    """Group each peer's messages (both directions) into threads (see thread_keyer).
+
+    ``<topic>-<date>-reply.md``, ``-result.md`` and any other ``<topic>-<date>-<word>`` belong to ``<topic>-<date>``.
+    Whose turn it is comes from the newest message that needs a reply: from the peer means it's your turn.
     A message whose "Replies to:" line links ``<other-folder>/<item>`` also counts in ``<item>``'s thread,
-    so one reply can answer several topics. ``- **Reply needed:** no`` on the newest message makes it ``fyi``.
+    so one reply can answer several topics. ``- **Reply needed:** no`` marks a message fyi: it moves the
+    thread's last activity but not the turn, and a thread of only fyi messages is ``fyi``;
+    a newest ``-done`` message makes it ``done``, and an archive folder with no newer message left in the share
+    makes it ``archived`` (both hidden unless show_done).
     """
     cutoff = time.time() - since_days * 86400 if since_days else None
     out = []
     for peer in sorted(set(c["incoming"]) | set(c["outgoing"])):
-        inbox, outbox = c["incoming"].get(peer), c["outgoing"].get(peer)
-        msgs = [("in", p) for p in items(inbox)] if inbox else []
-        msgs += [("out", p) for p in items(outbox)] if outbox else []
-        stems = sorted({stem(p) for _, p in msgs}, key=len)
-
-        def root_of(s: str) -> str | None:
-            return next((r for r in stems if s == r or s.startswith(r + "-")), None)
-
-        groups: dict[str, list] = {}
-        for d, p in msgs:
-            head = header(p)
-            entry = (written(p), d, p.name, bool(FYI_LINE.search(head)))
-            roots = {root_of(stem(p))}
-            other = (inbox if d == "out" else outbox)
-            if other is not None:
-                roots |= {root_of(stem(Path(name))) for pair, name in REPLY_LINK.findall(replies_field(head))
-                          if pair == other.name}
-            for r in roots - {None}:
-                groups.setdefault(r, []).append(entry)
+        groups, _ = thread_groups(c, peer)
+        marks = archive_marks(c["root"]) if groups else {}
         for root, ms in groups.items():
-            ms.sort()
-            last_t, last_d, last_name, fyi = ms[-1]
+            last_t, last_d, last_name, _ = ms[-1]
             if cutoff and last_t < cutoff:
                 continue
-            state = "fyi" if fyi else ("your turn" if last_d == "in" else f"waiting on {peer}")
+            archived = archived_at(c, peer, root, marks)
+            archived = archived is not None and last_t <= archived
+            done = archived or is_done(root, ms)
+            if done and not show_done:
+                continue
+            state = "archived" if archived else "done" if done else turn_state(ms, peer)
             out.append({"peer": peer, "thread": root, "messages": len(ms), "last": last_name,
                         "last_from": peer if last_d == "in" else c["host"],
                         "modified": dt.datetime.fromtimestamp(last_t).strftime("%Y-%m-%d %H:%M"),
@@ -255,7 +419,7 @@ def header(p: Path, lines: int = 40) -> str:
 
 def cmd_status(args) -> int:
     c = context(args)
-    rows = threads(c, args.since)
+    rows = threads(c, args.since, args.all)
     if args.json:
         print(json.dumps(rows, indent=1))
         return 0
@@ -323,26 +487,50 @@ def cmd_new(args) -> int:
     return 0
 
 
+def find_item(c: dict, peer: str, name: str) -> tuple[Path, Path]:
+    """(folder, item): NAME in the peer's folder to this host, else in this host's own folder to the peer."""
+    for box in (c["incoming"].get(peer), c["outgoing"].get(peer)):
+        if box is not None and (box / name).exists():
+            return box, box / name
+    sys.exit(f"{peer}-to-{c['host']}/{name} not found (nor in {c['host']}-to-{peer}/); "
+             "pass the item's name as listed by status.")
+
+
+def thread_of(c: dict, peer: str, item: Path) -> str:
+    """The thread name an item belongs to, so follow-ups are <topic>-<date>-<word> and names don't grow."""
+    base = thread_keyer([p for _, p in peer_messages(c, peer)] + [item])(stem(item))
+    if base == stem(item):  # an undated name: strip a trailing kind as before
+        for kind in REPLY_KINDS:
+            if base.endswith(f"-{kind}"):
+                return base[: -len(kind) - 1]
+    return base
+
+
+def replies_to(folder: Path, item: Path) -> str:
+    link = f"../{folder.name}/{item.name}" + ("/README.md" if item.is_dir() else "")
+    return f"- **Replies to:** [`{folder.name}/{item.name}`]({link})"
+
+
 def cmd_reply(args) -> int:
     c = context(args)
     box = outbox(c, args.to)
-    inbox = c["incoming"].get(args.to)
-    original = inbox / args.re if inbox else None
-    if original is None or not original.exists():
-        sys.exit(f"{args.to}-to-{c['host']}/{args.re} not found; pass the incoming item's name as listed by status.")
-    base = stem(original)
-    for kind in REPLY_KINDS:  # a reply to a reply keeps the thread's topic, so names don't grow
-        if base.endswith(f"-{kind}"):
-            base = base[: -len(kind) - 1]
-            break
-    target = box / f"{base}-{args.kind}.md"
+    if args.suffix is not None:
+        if args.kind:
+            sys.exit("Pass --kind or --suffix, not both.")
+        if not TOPIC.match(args.suffix) or re.search(DATE, args.suffix) or args.suffix == "done":
+            sys.exit("--suffix must be lowercase words joined by hyphens, without a date and not 'done' "
+                     "(use close), e.g. correction or addendum.")
+    kind = args.suffix or args.kind or "reply"
+    folder, original = find_item(c, args.to, args.re)
+    base = thread_of(c, args.to, original)
+    target = box / f"{base}-{kind}.md"
     if target.exists():
-        sys.exit(f"Refusing to overwrite {target}. Edit your own file, or pick another --kind for a second message.")
-    link = f"../{inbox.name}/{original.name}" + ("/README.md" if original.is_dir() else "")
-    text = HEADER.format(title=f"{c['host'].upper()} → {args.to.upper()}: {args.kind} to {base}",
+        sys.exit(f"Refusing to overwrite {target}. Edit your own file, or pick another --kind (or --suffix WORD) "
+                 "for a second message.")
+    text = HEADER.format(title=f"{c['host'].upper()} → {args.to.upper()}: {kind} to {base}",
                          sender=f"agent on {c['host']}", receiver=f"agent on {args.to}",
                          reply=f"{args.to}-to-{c['host']}/{base}-<kind>.md")
-    text = text.replace("- **Purpose:**", f"- **Replies to:** [`{inbox.name}/{original.name}`]({link})\n- **Purpose:**")
+    text = text.replace("- **Purpose:**", replies_to(folder, original) + "\n- **Purpose:**")
     if args.body_file:  # atomic reply: generated header + drafted body, written only if clean
         body = norm(args.body_file).read_text(encoding="utf-8")
         head = [line for line in text.splitlines() if "**Purpose:**" not in line and "**Don't:**" not in line]
@@ -358,6 +546,252 @@ def cmd_reply(args) -> int:
     target.write_text(text, encoding="utf-8")
     print(target)
     return 0
+
+
+DONE = """# {title}
+
+- **From:** {sender}
+- **For:** {receiver}
+{replies}
+- **Purpose:** close thread `{thread}`: nothing more to do in it
+- **Reply needed:** no
+- **Don't:** reply in this thread; start a new thread for new work
+"""
+
+
+def cmd_close(args) -> int:
+    c = context(args)
+    box = outbox(c, args.to)
+    folder, original = find_item(c, args.to, args.re)
+    base = thread_of(c, args.to, original)
+    target = box / f"{base}-done.md"
+    if target.exists():
+        sys.exit(f"Refusing to overwrite {target}: the thread is already closed from this side.")
+    text = DONE.format(title=f"{c['host'].upper()} → {args.to.upper()}: done {base}", sender=f"agent on {c['host']}",
+                       receiver=f"agent on {args.to}", replies=replies_to(folder, original), thread=base)
+    body = norm(args.body_file).read_text(encoding="utf-8") if args.body_file else (
+        "Done: this thread is finished. Its sender may archive it.\n")
+    text += "\n" + body
+    findings = scan(text.splitlines())
+    if findings:
+        for n, kind in findings:
+            print(f"{target.name} (draft):{n}: {kind}")
+        sys.exit(FIX_HINT.format(n=len(findings)) + ". Nothing was written to the share.")
+    target.write_text(text, encoding="utf-8")
+    print(target)
+    return 0
+
+
+def name_issue(p: Path, stems: set[str]) -> tuple[str | None, str, str | None]:
+    """(kind, detail, suggested name) for a top-level entry of a pair folder; kind None when it conforms."""
+    s, ext = stem(p), ("" if p.is_dir() else ".md")
+    n = parse_name(s)
+    shape, topic, date = n["shape"], n["topic"], n["date"]
+    if shape == "uppercase":
+        low = parse_name(s.lower())["shape"]
+        return shape, "names are lowercase", (s.lower() + ext) if low in ("base", "followup") else None
+    if shape == "base":
+        m = LEGACY_BEFORE_DATE.match(s)
+        if m and legacy_base(p, stems):
+            return ("suffix-before-date", "follow-ups are <topic>-<date>-<word>.md",
+                    f"{m.group(1)}-{m.group(3)}-{m.group(2)}{ext}")
+        return None, "", None
+    if shape == "followup":
+        return None, "", None
+    if shape == "second-date":
+        rest = re.sub(rf"-?{DATE}", "", n["suffix"]).strip("-")
+        return shape, "one date per name, the thread's", (f"{topic}-{date}-{rest}{ext}" if rest else None)
+    if shape == "date-first":
+        return shape, "the date goes after the topic", f"{topic}-{date}{ext}"
+    if shape == "undated":
+        return shape, "names end in -YYYY-MM-DD (or -YYYY-MM-DD-<word> for a follow-up)", None
+    return shape, "lowercase words joined by hyphens, then -YYYY-MM-DD", None
+
+
+def cmd_lint(args) -> int:
+    """Read-only check of the share's layout. Prints path: kind[: detail][ -> suggestion]; exit 1 on findings."""
+    root = find_root(args.root)
+    table = host_table(root)
+    pairs = [p for p in sorted(root.iterdir()) if p.is_dir() and PAIR.match(p.name)]
+    if args.mine:
+        me = find_host(args.host, hosts(root))
+        pairs = [p for p in pairs if PAIR.match(p.name).group(1) == me]
+    if args.pair:
+        pairs = [p for p in pairs if p.name == args.pair]
+        if not pairs:
+            sys.exit(f"No pair folder {args.pair!r} in the share.")
+    found: list[dict] = []
+    limit = args.max_mb * 1024 * 1024
+
+    def add(p: Path, kind: str, detail: str = "", suggest: str | None = None) -> None:
+        found.append({"path": p.relative_to(root).as_posix(), "kind": kind, "detail": detail, "suggest": suggest})
+
+    def large(p: Path) -> None:
+        for f in ([p] if p.is_file() else sorted(p.rglob("*"))):
+            if f.is_file() and not f.name.endswith(".!sync") and f.stat().st_size > limit:
+                add(f, "large-file", f"{f.stat().st_size / 1048576:.1f} MB > {args.max_mb:g} MB; "
+                                     "use another copy and send sizes and counts")
+
+    if not args.pair and not args.mine:
+        for p in sorted(root.iterdir()):
+            if p.name in ROOT_ALLOWED or p.name.endswith(".!sync") or (p.is_dir() and PAIR.match(p.name)):
+                continue
+            add(p, "root-entry", "only AGENTS.md, CLAUDE.md, desktop.ini, .sync, private and <from>-to-<to> "
+                                 "folders belong at the root")
+    for pair in pairs:
+        a, b = PAIR.match(pair.name).groups()
+        unknown = [h for h in (a, b) if h not in table]
+        if unknown:
+            add(pair, "unknown-host", f"{', '.join(unknown)} not in the AGENTS.md host table")
+        stems = {stem(p) for p in items(pair) + items(root / f"{b}-to-{a}")}
+        for p in sorted(pair.iterdir()):
+            if ignored(p):
+                continue
+            large(p)
+            if p.is_file() and p.suffix != ".md":
+                add(p, "stray-file", "messages are .md notes or package folders; put files inside a package")
+                continue
+            if p.is_dir() and not (p / "README.md").is_file():
+                add(p, "no-readme", "a package folder needs a README.md")
+            kind, detail, suggest = name_issue(p, stems)
+            if kind:
+                if suggest and suggest in {x.name for x in pair.iterdir()}:  # case-sensitive, also on Windows
+                    detail, suggest = detail + f"; {suggest} already exists", None
+                add(p, kind, detail, suggest)
+    if args.json:
+        print(json.dumps(found, indent=1))
+    else:
+        for f in found:
+            print(f"{f['path']}: {f['kind']}" + (f": {f['detail']}" if f["detail"] else "")
+                  + (f" -> {f['suggest']}" if f["suggest"] else ""))
+        print("clean" if not found else f"{len(found)} finding(s)")
+    return 1 if found else 0
+
+
+def raw_sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def cmd_archive(args) -> int:
+    """Move this host's finished threads out of its own <me>-to-<peer> folders. Dry run unless --apply.
+
+    A candidate thread starts in <me>-to-<peer> (this host sent its first message) and is done, or with
+    --older-than N has had no message in either direction for N days and is finished: an open request
+    (waiting on the peer) qualifies only with --include-waiting. Only this host's own entries move
+    (the base and its follow-ups there); the peer's folder is never touched. Refused: anything modified
+    in the last 10 minutes, *.!sync partials, an existing destination.
+    """
+    c = context(args)
+    root, me, now = c["root"], c["host"], time.time()
+    if args.to:
+        outbox(c, args.to)
+    rel = lambda p: p.relative_to(root).as_posix()  # noqa: E731
+    plans, refused, skipped, seen = [], [], [], False
+    for peer in ([args.to] if args.to else sorted(c["outgoing"])):
+        box, inbox = c["outgoing"].get(peer), c["incoming"].get(peer)
+        if box is None:
+            continue
+        groups, key = thread_groups(c, peer)
+        own: dict[str, list[Path]] = {}
+        for p in items(box):
+            own.setdefault(key(stem(p)), []).append(p)
+        for thread, ms in sorted(groups.items()):
+            if args.thread and thread != args.thread:
+                continue
+            seen = True
+            entries = own.get(thread, [])
+            if not any(stem(p) == thread for p in entries):
+                if args.thread:
+                    where = inbox.name if inbox is not None and any(stem(p) == thread for p in items(inbox)) \
+                        else "no folder (its base is gone)"
+                    refused.append((thread, f"its first message is in {where}: only its sender archives it"))
+                continue
+            idle = (now - ms[-1][0]) / 86400
+            if is_done(thread, ms):
+                reason = "done"
+            elif args.older_than is not None and idle > args.older_than:
+                reason = f"idle {idle:.0f} days"
+                state = turn_state(ms, peer)
+                if state.startswith("waiting on") and not args.include_waiting:
+                    why = f"{state} (an open request); pass --include-waiting to archive it"
+                    (refused if args.thread else skipped).append((thread, why))
+                    continue
+            else:
+                if args.thread:
+                    refused.append((thread, "not done: close it first, or pass --older-than N"))
+                continue
+            folders = [f for f in (box, inbox) if f is not None]
+            partial = any(f.name.endswith(".!sync") and key(stem(Path(f.name[:-6]))) == thread
+                          for d in folders for f in d.iterdir())
+            partial |= any(x.name.endswith(".!sync") for d in folders for p in items(d)
+                           if p.is_dir() and key(stem(p)) == thread for x in p.rglob("*"))
+            dest = archive_dir(root, box.name, thread)
+            if partial:
+                refused.append((thread, "partial download (*.!sync) in the thread; wait for the sync"))
+            elif ms[-1][0] > now - SETTLE_SECONDS:
+                refused.append((thread, "modified in the last 10 minutes"))
+            elif any((dest / p.name).exists() for p in entries):
+                taken = next(dest / p.name for p in sorted(entries) if (dest / p.name).exists())
+                refused.append((thread, f"destination exists: {rel(taken)}"))
+            elif any(p.parent.resolve() != box.resolve() or not box.name.startswith(f"{me}-to-") for p in entries):
+                refused.append((thread, f"an entry is outside {box.name}"))
+            else:
+                plans.append({"peer": peer, "thread": thread, "reason": reason, "dest": dest,
+                              "moves": [(p, dest / p.name) for p in sorted(entries)]})
+    if args.thread and not seen:
+        sys.exit(f"No thread {args.thread!r} with {args.to or 'any peer'}; names are as listed by status --all.")
+    for p in plans:
+        print(f"{'archive' if args.apply else 'would archive'} {p['peer']} {p['thread']} ({p['reason']}): "
+              f"{len(p['moves'])} entries -> {rel(p['dest'])}/")
+        for src, _ in p["moves"]:
+            print(f"  {rel(src)}{'/' if src.is_dir() else ''}")
+    for thread, why in skipped:
+        print(f"skipped {thread}: {why}")
+    for thread, why in refused:
+        print(f"refused {thread}: {why}")
+    if not plans and not refused and not skipped:
+        print("No threads to archive (done, or idle with --older-than N).")
+    if plans and not args.apply:
+        print("Dry run: nothing moved. Re-run with --apply to move these entries out of your own folders.")
+    if plans and args.apply:
+        manifests = root / ARCHIVE / "manifests"
+        manifests.mkdir(parents=True, exist_ok=True)
+        stamp = dt.datetime.now().strftime("%Y%m%dT%H%M%S")
+        mpath, n = manifests / f"{me}-{stamp}.json", 2
+        while mpath.exists():
+            mpath, n = manifests / f"{me}-{stamp}-{n}.json", n + 1
+        moves = []
+        for p in plans:
+            files = []
+            for src, dst in p["moves"]:
+                for f in ([src] if src.is_file() else sorted(x for x in src.rglob("*") if x.is_file())):
+                    files.append({"old": rel(f), "new": rel(dst / f.relative_to(src)) if src.is_dir() else rel(dst),
+                                  "sha256": raw_sha256(f), "size": f.stat().st_size})
+            moves.append({"peer": p["peer"], "thread": p["thread"], "reason": p["reason"],
+                          "entries": [{"old": rel(s), "new": rel(d)} for s, d in p["moves"]], "files": files})
+        # Written before the first move, so a crash still leaves the undo list.
+        mpath.write_text(json.dumps({"version": VERSION, "host": me, "created": dt.datetime.now().isoformat(
+            timespec="seconds"), "moves": moves}, indent=1), encoding="utf-8")
+        for p in plans:
+            for src, dst in p["moves"]:
+                try:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    if dst.exists():
+                        raise OSError(f"{rel(dst)} appeared during the run")
+                    src.rename(dst)  # same share, same volume: a rename, never copy-and-delete
+                except OSError as e:
+                    print(f"stopped at {rel(src)}: {e}. The lines above list what moved; the manifest "
+                          f"{rel(mpath)} also lists moves that did not happen.")
+                    return 1
+                print(f"moved: {rel(src)} -> {rel(dst)}")
+        print(f"manifest: {rel(mpath)}")
+        print("Undo: rename each moves[].entries[].new back to its .old path, as listed in the manifest. "
+              "Nothing was deleted.")
+    return 1 if refused else 0
 
 
 def snapshot(folders) -> dict[str, tuple[int, int]]:
@@ -502,6 +936,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
     p.add_argument("--since", type=float, default=14.0, help="only threads changed in the last N days (0 = all)")
+    p.add_argument("--all", action="store_true", help="also show done threads")
     p = sub.add_parser("new")
     p.add_argument("--to", required=True)
     p.add_argument("--topic", required=True)
@@ -513,8 +948,25 @@ def main(argv=None) -> int:
     p = sub.add_parser("reply")
     p.add_argument("--to", required=True)
     p.add_argument("--re", required=True, help="incoming item name, e.g. setup-2026-11-14 or note-2026-11-14.md")
-    p.add_argument("--kind", choices=REPLY_KINDS, default="reply")
+    p.add_argument("--kind", choices=REPLY_KINDS, help="default reply")
+    p.add_argument("--suffix", help="any other follow-up word instead of --kind, e.g. correction or addendum")
     p.add_argument("--body-file", help="local draft of the answer; the reply is written only if `check` passes")
+    p = sub.add_parser("close", help="write <topic>-<date>-done.md: the thread is finished")
+    p.add_argument("--to", required=True)
+    p.add_argument("--re", required=True, help="any item of the thread, in either folder")
+    p.add_argument("--body-file", help="local draft of a closing note; written only if `check` passes")
+    p = sub.add_parser("lint", help="read-only: names, root entries, big files, unknown hosts; exit 1 on findings")
+    p.add_argument("--pair", help="only this <from>-to-<to> folder")
+    p.add_argument("--mine", action="store_true", help="only this host's outgoing folders")
+    p.add_argument("--max-mb", type=float, default=25.0, help="flag files larger than this (default 25)")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("archive", help="move own done threads to private/archive/cross-pc (dry run unless --apply)")
+    p.add_argument("--to", help="only threads with this peer")
+    p.add_argument("--thread", help="only this thread, e.g. setup-2026-11-14")
+    p.add_argument("--older-than", type=float, help="also finished threads with no message for N days")
+    p.add_argument("--include-waiting", action="store_true",
+                   help="with --older-than: also threads waiting on the peer (an open request)")
+    p.add_argument("--apply", action="store_true", help="really move; prints the manifest and undo info")
     p = sub.add_parser("watch")
     p.add_argument("--once", action="store_true", help="exit after the first batch of events")
     p.add_argument("--all", action="store_true", help="also watch your outgoing folders")
@@ -526,7 +978,7 @@ def main(argv=None) -> int:
     sub.add_parser("verify", help="compare running and installed copies with the share's newest v<N>/SHA256SUMS")
     args = ap.parse_args(argv)
     return {"whoami": cmd_whoami, "status": cmd_status, "new": cmd_new, "reply": cmd_reply,
-            "watch": cmd_watch, "check": cmd_check, "manifest": cmd_manifest, "verify": cmd_verify}[args.cmd](args)
+            "close": cmd_close, "lint": cmd_lint, "archive": cmd_archive, "watch": cmd_watch, "check": cmd_check, "manifest": cmd_manifest, "verify": cmd_verify}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 ---
 name: cross-pc-messages
 description: "Use when agents on two or more PCs talk through a shared synced folder (Resilio Sync, Syncthing, OneDrive, an SMB share) with one-way <from>-to-<to> message folders: sending a request or handoff to another PC, replying, checking whose turn it is, or waiting for and monitoring the other PC's answer. Also use for 'message the agent on <host>', 'ask the other machine', 'check the Resilio folder', 'monitor resilio'. Not for Slack/email/GitHub messages, or for live agent-mail chat unless files or a durable record are involved."
-capability: "Resolves the share and this host, lists threads per peer with whose turn it is (including cross-topic replies and fyi notes), sends checked drafts atomically, creates replies with the standard header, waits for new incoming files (one-shot or streaming), scans outgoing text for secrets and unfilled placeholders, and verifies every PC runs the same release. Only ever adds files to the share; never deletes, moves or renames."
+capability: "Resolves the share and this host, lists threads per peer with whose turn it is (including cross-topic replies, fyi notes and done threads), sends checked drafts atomically, creates canonically named follow-ups and done markers with the standard header, lints the share layout read-only, waits for new incoming files (one-shot or streaming), scans outgoing text for secrets and unfilled placeholders, and verifies every PC runs the same release. Only adds files, except archive: a dry run by default that moves only this host's own finished threads into the private archive with a manifest."
 side_effect_level: remote_write
 approval_required: false
 requires_tools: "Bash or PowerShell with python 3.9+ (stdlib only); Bash run_in_background or Monitor for waiting."
-output_schema: "whoami/status as text or --json; new/reply print the created path; watch prints NEW:/CHANGED: <relative path> lines; check prints file:line:kind and exits 1 on findings; verify prints same v<N> or DRIFT per copy and exits 1 on drift."
+output_schema: "whoami/status/lint as text or --json; new/reply/close print the created path; lint prints path: kind[ -> suggestion] and exits 1 on findings; archive prints would-archive/refused lines (moved lines, the manifest and undo info with --apply) and exits 1 on refusals; watch prints NEW:/CHANGED: <relative path> lines; check prints file:line:kind and exits 1 on findings; verify prints same v<N> or DRIFT per copy and exits 1 on drift."
 risk_class: medium
 ---
 
@@ -19,6 +19,7 @@ This skill adds the routine and a helper. Read that file first, every session.
 M="<this skill's directory>/scripts/cross_pc_mail.py"   # e.g. under ~/.claude/skills or ~/.agents/skills
 python $M whoami            # share root, this host id, peers, incoming/outgoing folders
 python $M status            # threads changed in 14 days: "your turn" / "waiting on <peer>" (--since 0 = all)
+python $M lint --mine       # read-only: names, big files, stray entries in your own folders (no --mine: whole share)
 ```
 
 The share root comes from `--root`, then `CROSS_PC_SHARE`, then `~/.config/cross-pc-mail.json`
@@ -34,6 +35,50 @@ Don't guess a folder.
 | A quick ping or question while both agents are running, when agent-mail is set up | agent-mail (`send_message` / `fetch_inbox`). Put any file in the folder and send only the path |
 | Large binaries (models, disk images, builds) | neither: an SMB share or another copy, with sizes and counts in the message |
 
+## Thread names and lifecycle
+
+A thread is one base message and every follow-up to it, in both folders. The helper names files for you;
+`status` groups by these names and `lint` flags the rest.
+
+| Item | Name | Made by |
+|---|---|---|
+| Base: package or note | `<topic>-YYYY-MM-DD/README.md` or `<topic>-YYYY-MM-DD.md` | `new` |
+| Reply in the opposite folder | `<topic>-YYYY-MM-DD-<kind>.md` (reply, result, status, ack) | `reply --kind` |
+| Any other follow-up, either side | `<topic>-YYYY-MM-DD-<word>.md` (fix, addendum, correction, progress) | `reply --suffix <word>` |
+| Close | `<topic>-YYYY-MM-DD-done.md` | `close` |
+
+Legacy names still group where unambiguous. A note `<base>-<word>-<date>.md` joins an existing
+`<base>-<date>` thread only when `<word>` is a follow-up word (a reply kind, `done`, `fix`, `addendum`,
+`correction`, `warning`, `update`, `notice`, `followup`) or its `Replies to:` links the base. Otherwise it
+is its own thread, as a same-day topic that extends another's name usually is.
+`<topic>-<date>-<word>-<date2>` joins `<topic>-<date>`. `lint` suggests the canonical name for the joined
+ones only. It also flags uppercase, date-first and undated names, entries at the share root other than
+`AGENTS.md`, `CLAUDE.md`, `desktop.ini`, `.sync`, `private` and the pair folders, files over
+`--max-mb` (default 25), and pair folders whose host isn't in the host table. It only reads.
+
+Lifecycle: **open → done → archived.**
+
+1. **Open** from `new` until someone closes it.
+2. **Done:** when nothing is left to do, either side runs
+   `python $M close --to <peer> --re <any item of the thread>`. It writes `<topic>-<date>-done.md` with the
+   standard header and a "Replies to" link. `status` hides done threads unless `--all`. A later message
+   reopens the thread.
+3. **Archived:** only the thread's **sender** (the host whose folder holds the base) runs
+   `python $M archive`. It moves done threads, or with `--older-than N` finished threads idle for N days
+   in both directions. A thread still waiting on the peer is an open request: it is skipped unless
+   `--include-waiting`. This is the one owner-approved exception to "only adds files":
+   - it is a **dry run by default**; `--apply` moves;
+   - it moves **only its own outgoing** entries, the base and this host's own follow-ups in
+     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>/`, keeping names. The
+     names carry the date, so threads of a reused topic sit side by side;
+   - it writes a manifest (old path, new path, sha256, size) to `private/archive/cross-pc/manifests/`
+     before the first move, and prints undo info;
+   - it refuses other hosts' threads, anything modified in the last 10 minutes, `*.!sync` partials, and any
+     moved entry whose target name already exists there.
+
+   Show the user the dry run and get approval before `--apply`. The peer's replies stay in its own folder;
+   `status` on both hosts shows the thread as `archived` (only with `--all`) until a newer message reopens it.
+
 ## Send
 
 Draft locally, then send in one step. A file created in the share syncs at once, so a half-filled template
@@ -45,7 +90,10 @@ reaches the other PC before you finish it.
    - numbered asks, each one answerable;
    - what you'll do after the reply.
 
-   Add `- **Reply needed:** no` to the header of a pure status note, so the thread shows as `fyi`.
+   Run `python $M lint --mine` before you send, and fix what it flags in your own folders.
+
+   Add `- **Reply needed:** no` to the header of a pure status note. It counts as activity but doesn't
+   change whose turn it is, and a thread of only such notes shows as `fyi`.
 2. `python $M new --to <peer> --topic <topic> --from-file draft.md [--note]` writes
    `<me>-to-<peer>/<topic>-<date>/README.md` (or one `.md` with `--note`) **only if `check` would pass**:
    no secrets and no unfilled placeholders. It refuses to overwrite. For a package with scripts or files,
@@ -58,11 +106,13 @@ reaches the other PC before you finish it.
 ## Reply
 
 `python $M reply --to <peer> --re <incoming-name> --kind reply|result|status|ack --body-file answer.md` creates
-`<topic>-<kind>.md` in your outgoing folder: a generated header with a "Replies to" link, then your drafted
-answer. Like `new --from-file`, it writes only if `check` would pass. A reply to a reply keeps the thread's
-base topic (`x-result.md` → `x-ack.md`), so names don't grow. Any `<topic>-<suffix>` (`-warning`, `-parity`)
-joins the same thread. A message whose `Replies to:` field links other items (several links allowed, wrapped
-lines included) counts in those threads too, so one reply can answer several topics.
+`<topic>-<date>-<kind>.md` in your outgoing folder: a generated header with a "Replies to" link, then your
+drafted answer. Use `--suffix <word>` instead of `--kind` for any other follow-up. Like `new --from-file`, it
+writes only if `check` would pass. Every follow-up takes the thread's base name
+(`x-2026-11-18-result.md` → `x-2026-11-18-ack.md`), so names don't grow. `--re` may also name your own
+outgoing item, for a correction to your own message. A message whose `Replies to:` field links other items
+(several links allowed, wrapped lines included) counts in those threads too, so one reply can answer several
+topics.
 
 ## Receive
 
@@ -88,7 +138,7 @@ lines included) counts in those threads too, so one reply can answer several top
 - **Post an interim status note** when you'll be busy, or waiting on the user, for more than a few minutes.
   Otherwise the other side concludes you went silent and stops watching.
 - **Correct a posted message that turned out wrong** with a new file in the same thread
-  (e.g. `<topic>-<what>-warning.md`). Say plainly what was wrong and what the receiver should do,
+  (`reply --re <your item> --suffix correction` writes `<topic>-<date>-correction.md`). Say plainly what was wrong and what the receiver should do,
   rather than burying it in a later report.
 - Don't edit the other PC's files. Edit your own only if it hasn't been acted on, and say so in your next message.
 
@@ -117,6 +167,8 @@ Acting on the other PC directly (SSH, scheduled tasks, agent-mail pairing, SMB p
 ## Never
 
 - Delete, move or rename anything in the share unless the user asks. Every change syncs everywhere, and
-  cleanup of a finished thread belongs to its sender, after the receiver says it's done.
-- Write outside your own `<me>-to-<peer>` folders, or at the share root.
+  cleanup of a finished thread belongs to its sender, after the receiver says it's done. The one exception is
+  `archive --apply` on your own threads, after the user approves its dry run.
+- Write outside your own `<me>-to-<peer>` folders, or at the share root. `archive` writes only under
+  `private/archive/cross-pc/`.
 - Copy anything out of the share's private store into a repo, issue, chat or external tool.

@@ -14,6 +14,24 @@
       "expected_behavior": "Starts `watch` under Monitor for every incoming event and re-arms it on expiry, or uses `watch --once` for a single uncapped wait. Reports NEW/CHANGED files and acts only on what was read."
     },
     {
+      "id": "lint-share-names",
+      "prompt": "the resilio share is a mess, half the replies have the date in the wrong place - check it",
+      "should_trigger": true,
+      "expected_behavior": "Runs `lint` (read-only) on the whole share or `--mine`, reports each finding with its suggested canonical name, and does not rename anything itself. Renaming the other PC's files is left to that PC; renaming its own files happens only if the user asks."
+    },
+    {
+      "id": "close-finished-thread",
+      "prompt": "beta confirmed the driver fix works, we're done with that thread",
+      "should_trigger": true,
+      "expected_behavior": "Runs `close --to beta --re <an item of the thread>`, which writes `<topic>-<date>-done.md` with the standard header and a Replies to link in this host's outgoing folder, then confirms that `status` no longer lists the thread (it shows only with `--all`)."
+    },
+    {
+      "id": "archive-own-threads",
+      "prompt": "clean up the old finished threads in the shared folder",
+      "should_trigger": true,
+      "expected_behavior": "Runs `archive` as a dry run first and shows the user which of this host's own threads would move and which were refused. With `--older-than N` it skips threads still waiting on the peer unless the user asks for `--include-waiting`. Runs `--apply` only after the user approves, which moves them to `private/archive/cross-pc/<me>-to-<peer>/<topic>/`, then reports the manifest path and undo info. Never moves the other host's folder or anything outside `<me>-to-<peer>`."
+    },
+    {
       "id": "near-miss-slack",
       "prompt": "send a Slack message to the team that the deploy is done",
       "should_trigger": false,
