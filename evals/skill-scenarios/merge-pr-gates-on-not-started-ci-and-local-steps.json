@@ -47,11 +47,15 @@
     "- the same not-started cause failed a run on another recent commit outside this PR's branch;",
     "replay only the workflows whose jobs didn't start, in step 3",
     "the base branch's latest few commits have none either",
-    "`/ship-pr` needs CI.",
+    "`/ship-pr` works from CI results.",
     "**CI never triggered.** Workflows exist, but GitHub never registered a run for this commit.",
     "no run exists for `<sha>` at least 15 minutes after the head was pushed",
     "Don't push,\nclose and reopen the PR, or dispatch a workflow to get a run",
-    "If the PR deletes its workflows, replay the base branch's."
+    "If the PR deletes its workflows, replay the base branch's.",
+    "A PR can't switch its own\n  CI off;",
+    "not the commit date;",
+    "so\nan edited trigger or step can't decide what gets checked.",
+    "An empty table isn't evidence for a merge."
   ],
   "must_not_contain": []
 }

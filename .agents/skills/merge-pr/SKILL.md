@@ -20,7 +20,8 @@ standing approval, and it never pushes fixes. Never run this skill on your own i
 
 One PR per run. If the user names none, use the current branch's PR. If that's ambiguous, stop and ask.
 
-How this differs from `/ship-pr`: `/ship-pr` needs CI. It fixes CI failures and merges once CI is green.
+How this differs from `/ship-pr`: `/ship-pr` works from CI results. It fixes CI failures and merges once
+CI is green.
 `/merge-pr` doesn't need CI and never fixes anything. It merges when CI is already green, and when
 GitHub gave no CI result at all: no job could start, no run ever registered, or the repository has no
 CI. Then a local run on the head commit is the evidence. When the user typed `/merge-pr`, handle those
@@ -100,7 +101,12 @@ holds only when **all** of these are true:
 
 - the head commit or the base branch's tip has `.github/workflows`;
 - no run exists for `<sha>` at least 15 minutes after the head was pushed, well past the registration
-  wait above;
+  wait above. The push time is the branch's latest push in
+  `gh api "repos/<owner>/<repo>/activity?ref=refs/heads/<headRefName>&per_page=1" --jq '.[0].timestamp'`,
+  not the commit date;
+- the silence isn't specific to this PR: at least one other commit pushed outside this PR's branch since
+  the repository's last run (the base branch or another PR) also has no run. A PR can't switch its own
+  CI off;
 - no check from outside Actions exists or is pending for `<sha>` (above);
 - `mergeStateStatus` is not `BLOCKED`.
 
@@ -108,11 +114,14 @@ Record why, as far as GitHub shows it, and quote it in the report: the repositor
 kind (`gh run list --limit 1 --json createdAt,event,headBranch`), the workflow's state
 (`gh api repos/<owner>/<repo>/actions/workflows`), whether Actions is enabled
 (`gh api repos/<owner>/<repo>/actions/permissions`), and whether the workflow's `on:` filters
-(branches, paths, types) match this PR. A cause isn't required beyond that evidence. Don't push,
+(branches, paths, types) match this PR. No cause is needed beyond that evidence and the check that
+other commits are silent too. Don't push,
 close and reopen the PR, or dispatch a workflow to get a run: that changes the PR or starts work the
 user didn't ask for. If a run appears while you check, decide again from the top of this step.
 
-Then replay the workflows in step 3. If the PR deletes its workflows, replay the base branch's.
+Then replay the workflows in step 3. If the PR deletes its workflows, replay the base branch's. If the
+diff touches `.github/workflows` at all, replay the base branch's workflows as well as the head's, so
+an edited trigger or step can't decide what gets checked.
 
 **The repository has no CI.** This case holds only when **all** of these are true:
 
@@ -160,7 +169,8 @@ git worktree add --detach <scratch>/merge-pr-<n> <sha>
 **With workflows,** read every workflow that triggers on `pull_request` or `push` to the base branch.
 Run each job's `run:` steps in order, with the same commands, working directory and environment values,
 from the worktree. In the "some runs passed" case, replay only the workflows whose jobs didn't start;
-the passed runs already cover the rest.
+the passed runs already cover the rest. If no workflow triggers on `pull_request` or a push to the base
+branch, there is nothing to replay: stop and report. An empty table isn't evidence for a merge.
 
 **With no CI,** there is no workflow to replay. Run the project's declared checks instead: the build,
 lint and test commands in its `AGENTS.md`, `CLAUDE.md` or README, then the standard checks of each
