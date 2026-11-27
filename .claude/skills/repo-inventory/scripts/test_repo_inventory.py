@@ -240,6 +240,29 @@ class CompareLogic(unittest.TestCase):
         result = ri.compare([snap("alpha", entry(folder="scratch", key=None)), snap("beta")])
         self.assertNotIn("missing", {i["kind"] for r in result["repos"] for i in r["issues"]})
 
+    def test_two_checkouts_of_one_repo_on_a_host_are_reported(self):
+        a, b = entry(folder="widget"), entry(folder="widget-copy")
+        a["real_path"], b["real_path"] = "/srv/src/widget", "/srv/src/widget-copy"
+        result = ri.compare([snap("alpha", a, b), snap("beta", entry())])
+        repo = next(r for r in result["repos"] if r["key"] == "acme/widget")
+        dup = [i for i in repo["issues"] if i["kind"] == "duplicate-clones"]
+        self.assertEqual([i["host"] for i in dup], ["alpha"])
+        self.assertIn("widget-copy", dup[0]["detail"])
+        self.assertTrue(result["drift"])
+        self.assertEqual(len(ri.plan(result)["hosts"]["alpha"]), 2)
+
+    def test_same_checkout_listed_twice_is_collapsed(self):
+        # An older snapshot (or another tool) may list a linked folder as a second repo: same real path.
+        a, b = entry(folder="widget"), entry(folder="widget-link")
+        a["real_path"] = b["real_path"] = "/srv/src/widget"
+        result = ri.compare([snap("alpha", a, b), snap("beta", entry())])
+        repo = next(r for r in result["repos"] if r["key"] == "acme/widget")
+        self.assertEqual(len(repo["entries"]["alpha"]), 1)
+        self.assertIn("widget-link", repo["entries"]["alpha"][0]["aliases"])
+        self.assertFalse(result["drift"])
+        steps = ri.plan(result)["hosts"]["alpha"]
+        self.assertEqual(len(steps), 1)
+
     def test_table_and_exit_code(self):
         result = ri.compare([snap("alpha", entry()), snap("beta", entry(folder="w2"))])
         text = ri.render_compare(result)
@@ -657,6 +680,72 @@ class Integration(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("acme/widget", out)
         self.assertLess(len(out.encode("utf-8")), 16 * 1024)
+
+
+
+def make_link(link: Path, target: Path) -> bool:
+    """A junction on Windows (no admin rights needed), a symlink elsewhere. False when not permitted."""
+    if os.name == "nt":
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True)
+        return r.returncode == 0 and link.is_dir()
+    try:
+        os.symlink(target, link, target_is_directory=True)
+        return True
+    except OSError:
+        return False
+
+
+@unittest.skipUnless(HAVE_GIT, "git not installed")
+class LinkedFolders(unittest.TestCase):
+    """A folder that is a junction or symlink to another checkout is an alias, not a second repo."""
+
+    @classmethod
+    def setUpClass(cls):
+        t = cls.tmp = Path(tempfile.mkdtemp(prefix="repo-inv-link-"))
+        origin = t / "origins" / "acme" / "widget.git"
+        g(t, "init", "-q", "--bare", "-b", "main", str(origin))
+        seed = t / "seed"
+        g(t, "clone", "-q", str(origin), str(seed))
+        commit(seed, "f.txt", "x\n", "base")
+        g(seed, "push", "-q", "origin", "main")
+        cls.root = t / "delta"
+        cls.root.mkdir()
+        g(t, "clone", "-q", str(origin), str(cls.root / "widget"))
+        g(t, "clone", "-q", str(origin), str(cls.root / "widget-copy"))  # a real second checkout
+        cls.linked = make_link(cls.root / "widget-link", cls.root / "widget")
+        cls.snap = ri.snapshot(cls.root, host="delta")
+
+    @classmethod
+    def tearDownClass(cls):
+        link = cls.root / "widget-link"
+        if os.name == "nt" and link.exists():
+            os.rmdir(link)  # removes the junction only, never its target
+        elif link.is_symlink():
+            link.unlink()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def setUp(self):
+        if not self.linked:
+            self.skipTest("creating a junction or symlink is not permitted here")
+
+    def test_link_is_an_alias_of_the_real_checkout(self):
+        repos = {r["folder"]: r for r in self.snap["repos"]}
+        self.assertEqual(sorted(repos), ["widget", "widget-copy"])
+        self.assertEqual(repos["widget"]["aliases"], ["widget-link"])
+        self.assertEqual(repos["widget-copy"]["aliases"], [])
+        self.assertEqual(Path(repos["widget"]["real_path"]), (self.root / "widget").resolve())
+
+    def test_compare_reports_the_duplicate_and_plan_lists_each_checkout_once(self):
+        result = ri.compare([self.snap])
+        repo = next(r for r in result["repos"] if r["key"] == "acme/widget")
+        self.assertEqual(len(repo["entries"]["delta"]), 2)
+        dup = [i for i in repo["issues"] if i["kind"] == "duplicate-clones"]
+        self.assertEqual(len(dup), 1)
+        self.assertNotIn("widget-link", dup[0]["detail"])
+        paths = [s["command"] for r in ri.plan(result)["hosts"]["delta"] for s in r["steps"] if s["kind"] == "safe"]
+        self.assertEqual(len(paths), 2)
+        self.assertEqual(len(set(paths)), 2)
+        self.assertFalse([p for p in paths if "widget-link" in p])
 
 
 if __name__ == "__main__":

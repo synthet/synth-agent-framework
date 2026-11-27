@@ -231,7 +231,8 @@ def _clean(value):
 
 _REPO_TYPES = {"folder": (str,), "path": (str, type(None)), "key": (str, type(None)), "remote": (dict, type(None)),
                "head": (dict, type(None)), "dirty": (dict, type(None)), "branches": (list,), "worktrees": (list,),
-               "unmerged_paths": (list,), "in_progress": (list, type(None)), "error": (str, type(None))}
+               "unmerged_paths": (list,), "in_progress": (list, type(None)), "error": (str, type(None)),
+               "real_path": (str, type(None)), "aliases": (list,)}
 
 
 def validate_snapshot(data, source: str) -> dict:
@@ -339,6 +340,9 @@ def _group_issues(group: dict, hosts: list[str]) -> list[dict]:
             only = sorted(b for b in names[h] if any(b not in names[o] for o in present if o != h))
             if only:
                 add(h, "branch-only", ", ".join(only[:20]) + (f" (+{len(only) - 20})" if len(only) > 20 else ""))
+    for h in present:
+        if len(entries[h]) > 1:
+            add(h, "duplicate-clones", f"duplicate clones on {h}: " + ", ".join(e["folder"] for e in entries[h]))
     for h, e in flat:
         _entry_issues(h, e, add)
     return issues
@@ -355,7 +359,14 @@ def compare(snapshots: list[dict], aliases: dict[str, str] | None = None) -> dic
         for e in s["repos"]:
             key = apply_alias(e.get("key"), aliases)
             label = key or f"(no remote) {h}:{e['folder']}"
-            groups.setdefault(label, {"key": key, "label": label, "entries": {}})["entries"].setdefault(h, []).append(e)
+            listed = groups.setdefault(label, {"key": key, "label": label, "entries": {}})["entries"].setdefault(h, [])
+            where = os.path.normcase(e.get("real_path") or e.get("path") or "")
+            same = next((x for x in listed if where and os.path.normcase(x.get("real_path") or x.get("path") or "")
+                         == where), None)
+            if same is not None:  # one checkout listed under two folder names: an alias, not a second clone
+                same["aliases"] = list(same.get("aliases") or []) + [e["folder"]] + list(e.get("aliases") or [])
+            else:
+                listed.append(dict(e))
     repos = []
     for label in sorted(groups):
         g = groups[label]
@@ -512,7 +523,8 @@ def render_compare(result: dict, show_all: bool = False) -> str:
         for h, es in repo["entries"].items():
             for e in es:
                 d = e.get("dirty") or {}
-                rows.append([h, e["folder"], _head_text(e),
+                folder = e["folder"] + (f" (= {', '.join(e['aliases'])})" if e.get("aliases") else "")
+                rows.append([h, folder, _head_text(e),
                              f"{sha7(e.get('origin_sha'))} {(e.get('origin_date') or '')[:10]}".strip(),
                              "/".join(str(d.get(k, 0)) for k in ("staged", "unstaged", "untracked", "unmerged")),
                              str(e.get("stash_count") or 0), str(len(e.get("worktrees") or [])),
@@ -672,11 +684,14 @@ def _worktrees(repo: Path, timeout: float) -> list[dict]:
     return result
 
 
+def _rel(path: Path, root: Path) -> str:
+    return (path.relative_to(root).as_posix() if path != root else "") or path.name
+
+
 def collect(path: Path, root: Path, max_paths: int = 20, fetch: bool = False, timeout: float = 30,
             fetch_timeout: float = 120) -> dict | None:
     """One repo's facts. None for a linked worktree (it is recorded under its main repository)."""
-    rel = path.relative_to(root).as_posix() if path != root else path.name
-    e = {"folder": rel or path.name, "path": path.as_posix(), "remote": None, "key": None, "default_branch": None,
+    e = {"folder": _rel(path, root), "path": path.as_posix(), "real_path": None, "aliases": [], "remote": None, "key": None, "default_branch": None,
          "origin_ref": None, "origin_sha": None, "origin_date": None, "head": None, "branches": [],
          "worktrees": [], "dirty": {"staged": 0, "unstaged": 0, "untracked": 0, "unmerged": 0},
          "dirty_paths": [], "dirty_paths_truncated": False, "stash_count": 0, "in_progress": None,
@@ -774,6 +789,14 @@ def collect(path: Path, root: Path, max_paths: int = 20, fetch: bool = False, ti
     return e
 
 
+def _is_reparse(path: Path) -> bool:
+    """True for a Windows junction or symlink (Python < 3.12 has no DirEntry.is_junction)."""
+    try:
+        return bool(os.lstat(path).st_file_attributes & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
+    except (OSError, AttributeError):
+        return os.path.islink(path)
+
+
 def discover(root: Path, depth: int) -> list[Path]:
     found = []
 
@@ -789,15 +812,19 @@ def discover(root: Path, depth: int) -> list[Path]:
             return
         for en in entries:
             name = en.name
+            child = Path(en.path)
             try:
-                if not en.is_dir(follow_symlinks=False) or en.is_symlink() or getattr(en, "is_junction", bool)():
+                if not en.is_dir():
                     continue
+                # A junction or symlink is never searched (no loops), but one that is a checkout is kept, so
+                # snapshot can record it as an alias of the checkout it points at.
+                link = en.is_symlink() or _is_reparse(child)
             except OSError:
                 continue
-            child = Path(en.path)
             if (child / ".git").exists():  # a checkout is recorded whatever its name (.dotfiles, build, ...)
                 found.append(child)
-            elif not (name.startswith(".") or name.lower() in SKIP_DIRS or name.lower().endswith(".worktrees")):
+            elif not link and not (name.startswith(".") or name.lower() in SKIP_DIRS
+                                   or name.lower().endswith(".worktrees")):
                 walk(child, level + 1)
 
     walk(root, 0)
@@ -809,9 +836,18 @@ def snapshot(root, host: str, depth: int = 2, fetch: bool = False, max_paths: in
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
         raise UsageError(f"projects root {root} is not a folder")
-    paths = discover(root, depth)
+    # Folders that resolve to one checkout (a junction or symlink to another folder) are scanned once; the
+    # extra folder names are recorded as that checkout's aliases. A plain folder is preferred as the real one.
+    real: dict[str, list[Path]] = {}
+    for p in discover(root, depth):
+        real.setdefault(os.path.normcase(os.path.realpath(p)), []).append(p)
+    groups = [sorted(ps, key=lambda p: (_is_reparse(p), p.name.lower())) for ps in real.values()]
     with ThreadPoolExecutor(max(1, jobs)) as ex:
-        entries = list(ex.map(lambda p: collect(p, root, max_paths, fetch, timeout, fetch_timeout), paths))
+        entries = list(ex.map(lambda ps: collect(ps[0], root, max_paths, fetch, timeout, fetch_timeout), groups))
+    for ps, e in zip(groups, entries):
+        if e is not None:
+            e["real_path"] = Path(os.path.realpath(ps[0])).as_posix()
+            e["aliases"] = [_rel(p, root) for p in ps[1:]]
     return {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "tool_version": VERSION, "host": host,
             "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "root": root.as_posix(), "depth": depth, "fetched": fetch, "max_paths": max_paths,

@@ -28,7 +28,9 @@ python -I $R plan                                         # per-host steps: SAFE
 
 - Finds checkouts up to `--depth` folder levels below the root (default 2). It records a checkout whatever its
   name, but doesn't search inside hidden folders, `node_modules`, virtualenvs or build output. Linked worktrees, including those under `<repo>.worktrees`
-  folders, are recorded under their main repository, not as separate repos.
+  folders, are recorded under their main repository, not as separate repos. A folder that is a junction or
+  symlink to another checkout is scanned once: the real folder's entry lists it in `aliases`, next to its
+  `real_path`. Links are never searched inside.
 - Per repo it records: folder and path; remote URL (credentials stripped) and its key; default branch
   (`origin/HEAD`, else main or master) with the origin SHA and commit date; HEAD branch, SHA or detached;
   each local branch with upstream, ahead/behind, gone upstream, merged-into-default and unpushed commit count;
@@ -75,6 +77,8 @@ set `aliases` in the config. Keys can be `owner/name` or bare names (the owner i
 **Drift**, reported per repo and host. Any drift makes the exit code 1:
 
 - `missing`: no clone on that host.
+- `duplicate-clones`: two checkouts of the same repo, at different real paths, on one host. Entries with the
+  same real path (a linked folder in an older snapshot) are merged into one checkout with an alias instead.
 - `folder-differs`: the folder name is not the same on every host.
 - `default-differs`: the default branch is not the same on every host.
 - `stale-origin` / `origin-differs`: the hosts' origin SHAs differ. The host with the older origin commit
