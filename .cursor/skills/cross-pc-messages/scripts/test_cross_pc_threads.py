@@ -271,7 +271,8 @@ class Archive(ShareTest):
         before = self.tree()
         code, out = self.run_cli("archive")
         self.assertEqual(code, 0, self.stderr)
-        self.assertIn(f"would archive beta {topic} (done)", out)
+        self.assertIn(f"would archive beta {topic} (done): 2 entries -> "
+                      "private/archive/cross-pc/alpha-to-beta/print-queue/2026-11-19/", out)
         self.assertIn("--apply", out)
         self.assertEqual(self.tree(), before)
         self.assertFalse((self.root / "private").exists())
@@ -285,7 +286,7 @@ class Archive(ShareTest):
                  f"# r\n- **Replies to:** [`beta-to-alpha/{topic}-result.md`](../beta-to-alpha/{topic}-result.md)\n", when=OLD)
         code, out = self.run_cli("archive", "--apply")
         self.assertEqual(code, 0, self.stderr)
-        dest = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / topic
+        dest = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "print-queue" / "2026-11-19"
         self.assertTrue((dest / topic / "README.md").is_file())
         self.assertTrue((dest / topic / "run.ps1").is_file())
         self.assertTrue((dest / f"{topic}-ack.md").is_file())
@@ -302,7 +303,7 @@ class Archive(ShareTest):
         data = json.loads(manifests[0].read_text(encoding="utf-8"))
         files = {f["old"]: f for m in data["moves"] for f in m["files"]}
         f = files[f"alpha-to-beta/{topic}/run.ps1"]
-        self.assertEqual(f["new"], f"private/archive/cross-pc/alpha-to-beta/{topic}/{topic}/run.ps1")
+        self.assertEqual(f["new"], f"private/archive/cross-pc/alpha-to-beta/print-queue/2026-11-19/{topic}/run.ps1")
         self.assertEqual(f["size"], len(b"echo hi\n") + (1 if os.linesep == "\r\n" else 0))
         self.assertEqual(len(f["sha256"]), 64)
         self.assertEqual(len(files), 3)
@@ -324,6 +325,17 @@ class Archive(ShareTest):
         self.put(f"beta-to-alpha/{topic}-question.md", when=time.time() + 60)  # a newer message reopens it
         self.assertEqual(self.status()[topic]["state"], "your turn")
 
+    def test_reused_topic_nests_by_date_beside_older_archives(self):
+        older = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "print-queue"
+        (older / "2026-10-01").mkdir(parents=True)       # an earlier thread of the same topic
+        (older / "notes.md").write_text("hand-made\n", encoding="utf-8")  # an older hand-made <topic>/ archive
+        topic = self.done_thread()
+        code, out = self.run_cli("archive", "--apply")
+        self.assertEqual(code, 0, self.stderr)
+        self.assertTrue((older / "2026-11-19" / topic / "README.md").is_file())
+        self.assertTrue((older / "notes.md").is_file() and (older / "2026-10-01").is_dir())
+        self.assertEqual(self.status("--all")[topic]["state"], "archived")
+
     def test_open_thread_needs_older_than(self):
         self.put("alpha-to-beta/fan-curve-2026-10-01")
         self.put("beta-to-alpha/fan-curve-2026-10-01-reply.md")
@@ -339,7 +351,7 @@ class Archive(ShareTest):
         partial = self.done_thread("partial-2026-11-19")
         (self.out_dir / partial / "big.zip.!sync").write_text("p", encoding="utf-8")
         taken = self.done_thread("taken-2026-11-18")
-        (self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / taken).mkdir(parents=True)
+        (self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "taken" / "2026-11-18").mkdir(parents=True)
         self.put("beta-to-alpha/theirs-2026-11-17")
         self.put("beta-to-alpha/theirs-2026-11-17-done.md")
         before = self.tree()
@@ -360,22 +372,22 @@ class ReviewFindings(ShareTest):
     """Distinct threads stay distinct; fyi notes don't flip turns; --older-than keeps open requests."""
 
     def test_legacy_join_needs_followup_word_or_link(self):
-        self.put("alpha-to-beta/ring-2026-11-20")
-        self.put("alpha-to-beta/ring-loop-2026-11-20.md")             # a distinct topic of the same day
-        self.put("beta-to-alpha/ring-loop-2026-11-20-reply.md")
-        self.put("alpha-to-beta/ring-update-2026-11-20.md")           # follow-up vocabulary: joins
-        self.put("beta-to-alpha/ring-probe-2026-11-20.md",             # links the base: joins
-                 "# p\n- **Replies to:** [`alpha-to-beta/ring-2026-11-20/README.md`]"
-                 "(../alpha-to-beta/ring-2026-11-20/README.md)\n")
+        self.put("alpha-to-beta/kettle-2026-11-20")
+        self.put("alpha-to-beta/kettle-loop-2026-11-20.md")             # a distinct topic of the same day
+        self.put("beta-to-alpha/kettle-loop-2026-11-20-reply.md")
+        self.put("alpha-to-beta/kettle-update-2026-11-20.md")           # follow-up vocabulary: joins
+        self.put("beta-to-alpha/kettle-probe-2026-11-20.md",             # links the base: joins
+                 "# p\n- **Replies to:** [`alpha-to-beta/kettle-2026-11-20/README.md`]"
+                 "(../alpha-to-beta/kettle-2026-11-20/README.md)\n")
         rows = self.status()
-        self.assertEqual(rows["ring-2026-11-20"]["messages"], 3)
-        self.assertEqual(rows["ring-loop-2026-11-20"]["messages"], 2)
-        self.assertEqual(sorted(rows), ["ring-2026-11-20", "ring-loop-2026-11-20"])
+        self.assertEqual(rows["kettle-2026-11-20"]["messages"], 3)
+        self.assertEqual(rows["kettle-loop-2026-11-20"]["messages"], 2)
+        self.assertEqual(sorted(rows), ["kettle-2026-11-20", "kettle-loop-2026-11-20"])
         code, out = self.run_cli("lint", "--json")
         got = {(f["path"], f["kind"]): f["suggest"] for f in json.loads(out)}
         self.assertEqual(got, {
-            ("alpha-to-beta/ring-update-2026-11-20.md", "suffix-before-date"): "ring-2026-11-20-update.md",
-            ("beta-to-alpha/ring-probe-2026-11-20.md", "suffix-before-date"): "ring-2026-11-20-probe.md"})
+            ("alpha-to-beta/kettle-update-2026-11-20.md", "suffix-before-date"): "kettle-2026-11-20-update.md",
+            ("beta-to-alpha/kettle-probe-2026-11-20.md", "suffix-before-date"): "kettle-2026-11-20-probe.md"})
 
     def test_fyi_followup_keeps_whose_turn_it_is(self):
         self.put("alpha-to-beta/lamp-2026-11-20")

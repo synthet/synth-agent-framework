@@ -69,8 +69,8 @@ Lifecycle: **open → done → archived.**
    `--include-waiting`. This is the one owner-approved exception to "only adds files":
    - it is a **dry run by default**; `--apply` moves;
    - it moves **only its own outgoing** entries, the base and this host's own follow-ups in
-     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>-<date>/`, keeping names
-     (older hand-made archives used `<topic>/`; the date keeps each thread's folder unique);
+     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>/<date>/`, keeping names.
+     Each thread nests by date under its topic, so a reused topic never collides;
    - it writes a manifest (old path, new path, sha256, size) to `private/archive/cross-pc/manifests/`
      before the first move, and prints undo info;
    - it refuses other hosts' threads, anything modified in the last 10 minutes, `*.!sync` partials, and an

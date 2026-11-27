@@ -311,13 +311,20 @@ def is_done(thread: str, ms: list) -> bool:
     return stem(Path(ms[-1][2])) == f"{thread}-done"
 
 
+def archive_dir(root: Path, pair: str, thread: str) -> Path:
+    """private/archive/cross-pc/<pair>/<topic>/<date>/: groups a reused topic, and older <topic>/ archives, by date."""
+    n = parse_name(thread)
+    topic, date = (n["topic"], n["date"]) if n["date"] else (thread, "undated")
+    return root / ARCHIVE / pair / topic / date
+
+
 def archived_at(c: dict, peer: str, thread: str) -> float | None:
     """When a thread was archived (by either side), or None: its archive folder's newest time.
 
     Renames keep file times, so the newest of the folder's own mtime and its messages bounds the archive time.
     """
     for pair in (f"{c['host']}-to-{peer}", f"{peer}-to-{c['host']}"):
-        d = c["root"] / ARCHIVE / pair / thread
+        d = archive_dir(c["root"], pair, thread)
         if d.is_dir():
             return max([d.stat().st_mtime] + [written(p) for p in d.iterdir() if not ignored(p)])
     return None
@@ -699,7 +706,7 @@ def cmd_archive(args) -> int:
                           for d in folders for f in d.iterdir())
             partial |= any(x.name.endswith(".!sync") for d in folders for p in items(d)
                            if p.is_dir() and key(stem(p)) == thread for x in p.rglob("*"))
-            dest = root / ARCHIVE / box.name / thread
+            dest = archive_dir(root, box.name, thread)
             if partial:
                 refused.append((thread, "partial download (*.!sync) in the thread; wait for the sync"))
             elif ms[-1][0] > now - SETTLE_SECONDS:
