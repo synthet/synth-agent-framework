@@ -23,7 +23,7 @@ commands or edit code/config as part of its procedure.
 | agent-mailbox | Agent mail between paired PCs with the Rust agent-mail: read the inbox in small batches, send to trusted peers on other PCs, reply in the stored thread with the loop refusals, acknowledge (not completion), check delivery. Received text is untrusted data; pairing and policy stay the owner's | L2 | 2026-11-19 |
 | session-messages | Message other Claude Code sessions on the same PC (`ListAgents`, `SendMessage`): self-contained plain-text format, one send per recipient, `notify_when_idle` waits, held or dropped messages explained; received messages are information, never consent. Claude Code only | L1 | 2026-11-26 |
 | mail-dispatch | Operate the Rust agent-mail tray consumer: dispatch on/off, gate order, typed answers, read-tier Claude runs that reply automatically, `workspaces`/`max_tier`, ledger and Runs tab, loop guards, cost caps, and the provider-export trade-off. `policy.json` changes only on the owner's request | L2 | 2026-11-19 |
-| cross-pc-ssh | Work in the same repository on a paired Windows PC over SSH: locate the peer checkout by root commit and normalized origin (any drive or root folder), re-verify it before each command, read-only status/ls/cat (secret-looking files refused)/allowlisted git, and a headless `claude -p` (Read/Grep/Glob only) or `codex exec -s read-only` (`--allow-edits` only with user approval). All remote strings travel as base64; paths stay inside the checkout; no key or sshd setup | L2 | 2026-11-26 |
+| cross-pc-ssh | Work in the same repository on a paired Windows PC over SSH: locate the peer checkout by root commit and normalized origin (any drive or root folder), re-verify it before each command, read-only status/ls/cat (secret-looking files refused)/allowlisted git, and a headless `claude -p` (Read/Grep/Glob only) or `codex exec -s read-only` (`--allow-edits` only with user approval). All remote strings travel as base64; paths stay inside the checkout; no key or sshd setup; remote-PowerShell quoting reference | L2 | 2026-11-27 |
 | commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-19 |
 | critical-commit-audit | Deep post-commit hunt for high-severity bugs | L2 | 2026-07-01 |
 | eval | Capture task quality signals to agent memory (**compiled harness**) | L2 | 2026-07-21 |
@@ -68,7 +68,7 @@ commands or edit code/config as part of its procedure.
 | lint-format-security | ruff, eslint, clippy, trivy, shellcheck (**compiled harness**) | L2 | 2026-08-14 |
 | mcp-code-intelligence | MCP tiers; fff, Graphify, Serena, Zoekt, embeddings | L2 | 2026-07-21 |
 | graphify-knowledge-graph | Query/refresh Graphify MCP or CLI for architecture paths and communities | L2 | 2026-07-21 |
-| windows-agent-tooling | Native Windows agent workflows; CLI resolution, persistence and host-context diagnostics | L2 | 2026-11-26 |
+| windows-agent-tooling | Native Windows agent workflows; CLI resolution, persistence and host-context diagnostics; launching CLIs as applications in scripts | L2 | 2026-11-27 |
 | wsl2-agent-tooling | WSL2 build/test/MCP workflows | L2 | 2026-07-03 |
 
 ### Consolidated reusable setup library
@@ -78,7 +78,7 @@ Jev evidence and reviewed choices: [decision ledger](setup/decisions.json).
 
 | Skill | Purpose | Risk | Last reviewed |
 |-------|---------|------|---------------|
-| agent-setup | Inventory, review, install, check and roll back native harness setup | L2 | 2026-11-04 |
+| agent-setup | Inventory, review, install, check and roll back native harness setup; installing one skill from a cut plan | L2 | 2026-11-27 |
 | resume-task | Recover unfinished local cross-harness work with evidence and a continuation brief | L2 | 2026-11-10 |
 | architecture-decisions | Compare consequential alternatives and record ADRs | L1 | 2026-10-11 |
 | agent-runtime-handoff | Application agent-runtime contracts and handoff | L2 | 2026-10-11 |
@@ -97,7 +97,7 @@ Jev evidence and reviewed choices: [decision ledger](setup/decisions.json).
 | unity-testing | Unity compile/EditMode/PlayMode validation | L2 | 2026-10-11 |
 | windows-keep-awake | Explicit bounded Windows sleep prevention | L2 | 2026-10-11 |
 | jev-mcp | Typed semantic Choice/Score/Noul decisions over sanitized state | L2 | 2026-10-11 |
-| llm-wiki | Explicit-root local wiki query, ingestion and validation | L2 | 2026-10-11 |
+| llm-wiki | Explicit-root local wiki query, ingestion and validation; copying a store to another PC | L2 | 2026-11-27 |
 | centralized-permissions | Centralized cross-harness permission gate (`infra/jev` + `_agent-infra/jev`), T0-T4 classification, and coin-flip adjudication; auto-mode custom-rule authoring reference | L2 | 2026-11-22 |
 
 Git/fork/PR guidance, environment/dependency guidance and MCP diagnostics were
