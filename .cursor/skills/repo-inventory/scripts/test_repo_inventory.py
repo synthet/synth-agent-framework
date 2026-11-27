@@ -329,6 +329,62 @@ class PlanLogic(unittest.TestCase):
         self.assertEqual(self.safe(plan, "alpha"), [])
         self.assertIn("unsafe", self.human(plan, "alpha"))
 
+    def test_every_applicable_reason_is_reported(self):
+        """Each fact is judged on its own: no fact hides another, and a pull is planned only when clean,
+        on the default branch, with nothing in progress and behind only."""
+        import itertools
+        counts = {"even": (0, 0), "ahead": (2, 0), "behind": (0, 3), "diverged": (2, 3)}
+        for dirty, ab, where, op in itertools.product((False, True), counts, ("default", "off-default", "detached"),
+                                                      ("none", "conflict", "rebase")):
+            a, b = counts[ab]
+            e = entry(branch="feat" if where == "off-default" else "main", detached=where == "detached",
+                      ahead=a, behind=b,
+                      dirty={"staged": int(dirty), "unstaged": int(dirty), "untracked": 0,
+                             "unmerged": int(op == "conflict")},
+                      in_progress={"none": None, "conflict": ["merge"], "rebase": ["rebase"]}[op],
+                      unmerged=["f.txt"] if op == "conflict" else ())
+            # Branch counts as snapshot writes them: main tracks origin/main; feat has no upstream.
+            main = {"name": "main", "sha": "1" * 40, "upstream": "origin/main", "ahead": 0, "behind": 0,
+                    "gone": False, "merged": True, "unpushed": 0}
+            if where == "default":
+                main.update(ahead=a, behind=b, unpushed=a, merged=not a)
+                e["branches"] = [main]
+            elif where == "off-default":
+                e["branches"] = [main, {"name": "feat", "sha": "3" * 40, "upstream": None, "ahead": None,
+                                        "behind": None, "gone": False, "merged": not a, "unpushed": a}]
+            else:
+                e["branches"] = [main]
+            steps = ri._host_steps(e, stale=False)
+            text = " | ".join(s.get("reason") or s.get("command") for s in steps)
+            human = " | ".join(s["reason"] for s in steps if s["kind"] == "human")
+            notes = " | ".join(s["reason"] for s in steps if s["kind"] == "note")
+            pulls = [s for s in steps if s["kind"] == "safe" and "pull" in s["command"]]
+            want = []
+            if dirty:
+                want.append("dirty: ")
+            if op == "conflict":
+                want.append("conflict: ")
+            if op == "rebase":
+                want.append("rebase in progress")
+            if where == "off-default":
+                want.append("on branch feat")
+            if where == "detached":
+                want.append("detached HEAD")
+            if where == "default" and ab == "diverged":
+                want.append("diverged")
+            if where != "detached" and a:
+                want.append("unpushed: " + ("main" if where == "default" else "feat"))
+            if where == "detached" and a:
+                want.append(f"{a} commit(s) not on origin/main")
+            with self.subTest(dirty=dirty, ab=ab, where=where, op=op):
+                self.assertTrue(any("fetch" in s.get("command", "") for s in steps), text)
+                for w in want:
+                    self.assertIn(w, human, text)
+                clean_pull = not dirty and op == "none" and where == "default" and ab == "behind"
+                self.assertEqual(bool(pulls), clean_pull, text)
+                wait_note = where == "default" and ab == "behind" and not clean_pull
+                self.assertEqual("once" in notes, wait_note, text)
+
     def test_dirty_is_reported_off_default_and_detached(self):
         dirty = {"staged": 1, "unstaged": 2, "untracked": 0, "unmerged": 0}
         plan = ri.plan(ri.compare([snap("alpha", entry(branch="feat", dirty=dirty)),

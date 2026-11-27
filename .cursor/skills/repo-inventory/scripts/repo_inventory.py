@@ -421,10 +421,17 @@ def _host_steps(e: dict, stale: bool) -> list[dict]:
     d = e.get("dirty") or {}
     default = e.get("default_branch")
     unmerged = e.get("unmerged_paths") or []
+    current, detached = head.get("branch"), bool(head.get("detached"))
+    on_default = not detached and bool(current) and current == default
+    vd = head.get("vs_default") or {}
+    a, b = vd.get("ahead") or 0, vd.get("behind") or 0
+    ref = e.get("origin_ref") or f"origin/{default}"
+    # Every fact is judged on its own, so one reason never hides another.
     blocking = _dirty_text(d, untracked=False)
-    if blocking:  # whatever the branch state: dirty work needs a decision before any sync
+    if blocking:
         steps.append(_human(f"dirty: {blocking}: commit or stash by hand"))
-    if e.get("in_progress") or d.get("unmerged") or unmerged:
+    operation = bool(e.get("in_progress") or d.get("unmerged") or unmerged)
+    if operation:
         ops = ", ".join(e.get("in_progress") or [])
         if unmerged or d.get("unmerged"):
             reason = f"conflict: {len(unmerged) or d.get('unmerged')} unmerged path(s) ({', '.join(unmerged[:5])})" \
@@ -432,29 +439,24 @@ def _host_steps(e: dict, stale: bool) -> list[dict]:
         else:
             reason = f"{ops} in progress"
         steps.append(_human(reason + ": finish or abort by hand"))
-    elif head.get("detached"):
-        steps.append(_human(f"detached HEAD at {sha7(head.get('sha'))}: check out a branch by hand"))
-    elif head.get("branch") != default:
-        steps.append(_human(f"on branch {head.get('branch')}, not {default}: no pull planned"))
-    else:
-        vd = head.get("vs_default") or {}
-        a, b = vd.get("ahead") or 0, vd.get("behind") or 0
-        ref = e.get("origin_ref") or f"origin/{default}"
-        if blocking:
-            if b or stale:
-                steps.append(_note(f"{b} behind {ref}: pull --ff-only once the tree is clean" if b
-                                   else f"{ref} may be stale: pull --ff-only once the tree is clean"))
-        elif a and b:
-            steps.append(_human(f"diverged: {a} ahead and {b} behind {ref}: rebase or merge by hand"))
-        elif a:
-            steps.append(_human(f"unpushed: {a} commit(s) on {default} not on {ref}: push or reset by hand"))
-        elif (b or stale) and remote:
+    if detached:
+        steps.append(_human(f"detached HEAD at {sha7(head.get('sha'))}"
+                            + (f", {a} commit(s) not on {ref}" if a else "") + ": check out a branch by hand"))
+    elif current != default:
+        steps.append(_human(f"on branch {current}, not {default}: no pull planned"))
+    if on_default and a and b:
+        steps.append(_human(f"diverged: {a} ahead and {b} behind {ref}: rebase or merge by hand"))
+    unpushed = [f"{x['name']} ({x['unpushed']})" for x in e.get("branches") or [] if x.get("unpushed")]
+    if on_default and a and not any(x.get("name") == default and x.get("unpushed") for x in e.get("branches") or []):
+        unpushed.insert(0, f"{default} ({a} not on {ref})")
+    if unpushed:
+        steps.append(_human(f"unpushed: {', '.join(unpushed[:10])}: push, or reset or delete by hand"))
+    if on_default and not a and (b or stale) and remote:
+        if blocking or operation:
+            steps.append(_note(f"{b} behind {ref}: pull --ff-only once the tree is clean" if b
+                               else f"{ref} may be stale: pull --ff-only once the tree is clean"))
+        else:
             steps.append(_safe(f"{git} pull --ff-only"))
-    current = head.get("branch")
-    other = [f"{x['name']} ({x['unpushed']})" for x in e.get("branches") or []
-             if x.get("unpushed") and not (x["name"] == current == default)]
-    if other:
-        steps.append(_human(f"unpushed branches: {', '.join(other[:10])}: push or delete by hand"))
     gone = [x["name"] + (" (merged)" if x.get("merged") else "") for x in e.get("branches") or [] if x.get("gone")]
     if gone:
         steps.append(_human(f"upstream gone: {', '.join(gone[:10])}: delete or re-push by hand"))
