@@ -30,7 +30,9 @@ Take the open items from the **latest** report only (the last "left for you" lis
   haven't changed since you last reported them;
 - items owned by another session, and messages from other sessions that don't name this goal's work.
 
-If nothing is left, or nothing has changed since the last `/go`, say so in one line and stop. Don't
+If nothing is left, or nothing has changed since the last `/go`, say so in one line and stop. An item
+skipped because the user declined a permission prompt is still open: retry it, announced, even when
+nothing else changed. Don't
 invent work, re-check what you won't act on, or reprint the table.
 
 ## 2. Decide
@@ -78,17 +80,17 @@ Work through the items as in the `step-by-step` skill, one at a time:
 - Merging the user's own PRs, normally with green CI.
 - Merging without green CI only in these two cases:
   - CI was already reported to the user as broken for reasons unrelated to the change.
-  - The repository has no CI at all: the PR was shown to the user, it's their own PR, neither the
-    PR's head nor the base branch has workflows, and a local check passes on that exact commit.
-    In a private repository that's enough. In a public repository, the PR's tracked ticket must
-    also have been approved by an independent reviewer, someone other than its author (for example
-    an agent-flow ticket in `done`). Without that approval, leave a public PR for the user. Failed,
-    pending or never-started checks aren't "no CI".
+  - The repository has no CI at all: the PR was shown to the user, it's their own PR in their own
+    repository, neither the PR's head nor the base branch has workflows, and a local check passes
+    on that exact commit. In a private repository that's enough. In a public repository, the PR's
+    tracked ticket must also show an approval recorded by a reviewer who is neither the ticket's
+    owner nor its creator (for agent-flow, an `approved` event in `agent-flow log <id>` by
+    another actor). A `done` status alone isn't proof, because a ticket can be closed without
+    review. Without that approval, leave a public PR for the user. Failed, pending or
+    never-started checks aren't "no CI".
 - Merging a PR this run opened, if the item it came from was shown to the user, it's the user's own
   PR in their own repository, and CI is green on its exact head commit. Wait for CI to finish. No
-  checks at all doesn't count as green. The broken-CI exception doesn't apply here. The no-CI
-  exception applies only when an independent reviewer approved the PR's ticket, whether the
-  repository is public or private.
+  checks at all doesn't count as green, and neither exception above applies here.
 
 ### What `/go` never approves
 
