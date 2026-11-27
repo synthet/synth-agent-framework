@@ -60,7 +60,8 @@ SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 DEFAULT_SSH_COMMAND = "python -I .claude/skills/repo-inventory/scripts/repo_inventory.py snapshot"
 GIT_CFG = ["-c", "core.quotepath=off", "-c", "core.fsmonitor=false", "-c", "color.ui=never"]
 # Characters that a shell would expand or that end a double-quoted argument; such values are not printed as commands.
-UNSAFE_ARG = re.compile(r'["`$%!\x00-\x1f\x7f\ufffd]')
+# A backslash is refused too: at the end of a value it would escape the closing quote.
+UNSAFE_ARG = re.compile(r'["`$%!\\\x00-\x1f\x7f\ufffd]')
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 OPERATIONS = (("MERGE_HEAD", "merge"), ("rebase-merge", "rebase"), ("CHERRY_PICK_HEAD", "cherry-pick"),
               ("REVERT_HEAD", "revert"), ("BISECT_LOG", "bisect"))
@@ -421,10 +422,16 @@ def _host_steps(e: dict, stale: bool) -> list[dict]:
     default = e.get("default_branch")
     unmerged = e.get("unmerged_paths") or []
     blocking = _dirty_text(d, untracked=False)
+    if blocking:  # whatever the branch state: dirty work needs a decision before any sync
+        steps.append(_human(f"dirty: {blocking}: commit or stash by hand"))
     if e.get("in_progress") or d.get("unmerged") or unmerged:
         ops = ", ".join(e.get("in_progress") or [])
-        reason = f"conflict: {len(unmerged)} unmerged path(s) ({', '.join(unmerged[:5])})" if unmerged else "in progress"
-        steps.append(_human(reason + (f"; {ops} in progress" if ops else "") + ": finish or abort by hand"))
+        if unmerged or d.get("unmerged"):
+            reason = f"conflict: {len(unmerged) or d.get('unmerged')} unmerged path(s) ({', '.join(unmerged[:5])})" \
+                + (f"; {ops} in progress" if ops else "")
+        else:
+            reason = f"{ops} in progress"
+        steps.append(_human(reason + ": finish or abort by hand"))
     elif head.get("detached"):
         steps.append(_human(f"detached HEAD at {sha7(head.get('sha'))}: check out a branch by hand"))
     elif head.get("branch") != default:
@@ -434,7 +441,9 @@ def _host_steps(e: dict, stale: bool) -> list[dict]:
         a, b = vd.get("ahead") or 0, vd.get("behind") or 0
         ref = e.get("origin_ref") or f"origin/{default}"
         if blocking:
-            steps.append(_human(f"dirty: {blocking}" + (f"; {b} behind {ref}" if b else "") + ": commit or stash by hand"))
+            if b or stale:
+                steps.append(_note(f"{b} behind {ref}: pull --ff-only once the tree is clean" if b
+                                   else f"{ref} may be stale: pull --ff-only once the tree is clean"))
         elif a and b:
             steps.append(_human(f"diverged: {a} ahead and {b} behind {ref}: rebase or merge by hand"))
         elif a:
@@ -478,6 +487,8 @@ def plan(result: dict) -> dict:
                 others = [e for es in entries.values() for e in es if (e.get("remote") or {}).get("url")]
                 others.sort(key=lambda e: (e["remote"].get("host") == "local",))
                 url = strip_credentials(others[0]["remote"]["url"]) if others else None
+                if url and parse_remote(url)[0] == "local":
+                    url = url.replace("\\", "/")  # git accepts C:/... and //server/... on Windows
                 names = collections.Counter(e["folder"].rsplit("/", 1)[-1] for es in entries.values() for e in es)
                 folder = names.most_common(1)[0][0] if names else None
                 root = roots.get(h)

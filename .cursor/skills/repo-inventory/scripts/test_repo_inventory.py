@@ -329,6 +329,37 @@ class PlanLogic(unittest.TestCase):
         self.assertEqual(self.safe(plan, "alpha"), [])
         self.assertIn("unsafe", self.human(plan, "alpha"))
 
+    def test_dirty_is_reported_off_default_and_detached(self):
+        dirty = {"staged": 1, "unstaged": 2, "untracked": 0, "unmerged": 0}
+        plan = ri.plan(ri.compare([snap("alpha", entry(branch="feat", dirty=dirty)),
+                                   snap("beta", entry(detached=True, dirty=dirty)),
+                                   snap("gamma", entry(dirty=dirty, in_progress=["rebase"]))]))
+        for host, other in (("alpha", "on branch feat"), ("beta", "detached"), ("gamma", "in progress")):
+            with self.subTest(host=host):
+                reasons = self.human(plan, host)
+                self.assertIn("dirty: 1 staged, 2 unstaged", reasons)
+                self.assertIn(other, reasons)
+                self.assertFalse(any("pull" in c for c in self.safe(plan, host)))
+
+    def test_backslash_values_are_never_quoted(self):
+        # A trailing backslash would escape the closing quote of a printed command.
+        plan = ri.plan(ri.compare([snap("alpha", entry(folder="w\\", behind=1))]))
+        self.assertEqual(self.safe(plan, "alpha"), [])
+        self.assertIn("unsafe", self.human(plan, "alpha"))
+        for url in ("https://github.com/acme/gizmo\\", "https://github.com/acme/gizmo\\\" x"):
+            with self.subTest(url=url):
+                plan = ri.plan(ri.compare([snap("alpha", entry(folder="gizmo", key="acme/gizmo", url=url)),
+                                           snap("beta")]))
+                step = next(s for s in self.steps(plan, "beta", "acme/gizmo") if s["kind"] == "human")
+                self.assertNotIn("suggest", step)
+
+    def test_windows_local_origin_is_suggested_with_forward_slashes(self):
+        plan = ri.plan(ri.compare([
+            snap("alpha", entry(folder="gizmo", key="acme/gizmo", url="C:\\git\\acme\\gizmo.git")),
+            snap("beta", root="/home/beta/src")]))
+        step = next(s for s in self.steps(plan, "beta", "acme/gizmo") if s["kind"] == "human")
+        self.assertIn('clone -- "C:/git/acme/gizmo.git" "gizmo"', step["suggest"])
+
     def test_render(self):
         text = ri.render_plan(ri.plan(ri.compare([snap("alpha", entry(behind=1))])))
         self.assertIn("SAFE", text)

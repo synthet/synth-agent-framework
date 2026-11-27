@@ -100,10 +100,12 @@ Stash and worktree counts are shown in the table but are not drift. `--all` also
 - **SAFE** `git -C "<path>" pull --ff-only`, only when the repo is on its default branch, has no staged,
   unstaged or unmerged changes and no operation in progress, is not ahead, and is behind or its origin is older
   than another host's. Untracked files don't block it, because git refuses a pull that would overwrite them.
-- **NEEDS HUMAN** with the reason for anything else: dirty, diverged, unpushed commits, conflict or an operation
+- **NEEDS HUMAN** with the reason for anything else. A dirty tree is always reported, whatever the branch state,
+  next to any other reason: dirty, diverged, unpushed commits, conflict or an operation
   in progress, detached HEAD, a branch other than the default, gone upstreams, dirty or prunable worktrees, an
-  error. A missing clone gets a suggested `git -C "<root>" clone -- "<url>" "<folder>"`.
-- Paths, URLs or folder names with quote, `$`, `%`, `!` or control characters, or a leading `-`, are
+  error. A missing clone gets a suggested `git -C "<root>" clone -- "<url>" "<folder>"` (a local-path origin is
+  written with forward slashes).
+- Paths, URLs or folder names with a quote, backslash, `$`, `%`, `!` or control characters, or a leading `-`, are
   never printed as commands. They become NEEDS HUMAN. Snapshots read from the share or over ssh are
   validated, and control characters in their strings are replaced, so they can't forge output lines.
 
