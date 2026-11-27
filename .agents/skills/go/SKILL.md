@@ -44,12 +44,20 @@ Settle each item in this order, and record which rule settled it:
 4. **Still undecided:** leave the item and report it. Don't guess.
 
 The user's own choices outrank all of these. If the user reversed something, it stays reversed, even
-when an earlier recommendation said otherwise.
+when an earlier recommendation said otherwise. A reversal is the user's own words ("don't merge it",
+"leave that"). A declined permission prompt is not: it means "not in this run" (see **When to stop an
+item**).
 
 ## 3. Order
 
 Sort by dependency first. Then do reversible, local items before outward-facing ones, and merges
 last.
+
+**Announce gated actions before you start.** In one line, name every action the harness may ask about:
+merges, and anything else in the user's permission `ask` list (for example `gh pr merge` or
+`git merge`). For example: "This run will merge #131 and #132; expect a merge prompt for each." The
+prompt is the user's confirmation, and `/go` can't skip it. The announcement stops the prompt from
+coming as a surprise.
 
 ## 4. Execute
 
@@ -70,12 +78,17 @@ Work through the items as in the `step-by-step` skill, one at a time:
 - Merging the user's own PRs, normally with green CI.
 - Merging without green CI only in these two cases:
   - CI was already reported to the user as broken for reasons unrelated to the change.
-  - The repository has no CI at all: the PR was shown to the user, it's their own PR in their own
-    private repository, the PR's head has no workflows, and a local check passes on that exact
-    commit. Failed, pending or never-started checks aren't "no CI".
+  - The repository has no CI at all: the PR was shown to the user, it's their own PR, neither the
+    PR's head nor the base branch has workflows, and a local check passes on that exact commit.
+    In a private repository that's enough. In a public repository, the PR's tracked ticket must
+    also have been approved by an independent reviewer, someone other than its author (for example
+    an agent-flow ticket in `done`). Without that approval, leave a public PR for the user. Failed,
+    pending or never-started checks aren't "no CI".
 - Merging a PR this run opened, if the item it came from was shown to the user, it's the user's own
   PR in their own repository, and CI is green on its exact head commit. Wait for CI to finish. No
-  checks at all doesn't count as green, and neither exception above applies here.
+  checks at all doesn't count as green. The broken-CI exception doesn't apply here. The no-CI
+  exception applies only when an independent reviewer approved the PR's ticket, whether the
+  repository is public or private.
 
 ### What `/go` never approves
 
@@ -97,6 +110,9 @@ Runbook gates and review sign-offs stay blocked; `/go` can't stand in for them.
 Stop the item and report it when:
 
 - A hook or deny rule blocks it. **Never reword a command to get past a block.**
+- The user declines a permission prompt. Mark the item skipped for this run, give its paste-ready
+  command in the report, and don't retry it in this run. The next `/go` may try it again, announced
+  as above, unless the user has since said in their own words not to.
 - A check fails with no clear fix inside the item's scope.
 - State differs from what the decision assumed and a new decision doesn't clear it.
 - Another session is working in the target.
