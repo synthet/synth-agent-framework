@@ -1,6 +1,6 @@
 ---
 name: remote-build
-description: "Build the current project on a paired build PC over SSH, bring the verified artifacts back, and hand each target PC its project-procedure install: resolve the build host by hostname, pre-flight it (reachable, no other heavy build, RAM and disk, clean checkout fast-forwarded to the exact commit), start the build detached so a dropped SSH session can't kill it, wait on a done-file, check the artifacts' commit, size, SHA-256 and version output, copy them into a checkout at the same commit on each target, then run that target's install only after the user approves that PC. Runs only when the user types /remote-build, or asks to build on another PC or a build server. For a build on this PC use /build; for an install on this PC only use /deploy."
+description: "Build the current project on a paired build PC over SSH, bring the verified artifacts back, and hand each target PC its project-procedure install: resolve the build host by hostname, pre-flight it (reachable, no other heavy build, RAM and disk, clean checkout fast-forwarded to the exact commit), start the build detached so a dropped SSH session can't kill it, wait on a done-file, check the artifacts' commit, size, SHA-256 and version output, copy them into a checkout at the same commit on each target, then run that target's install only after the user approves that PC. Runs only when the user types /remote-build. For a build on this PC use /build; for an install on this PC only use /deploy."
 capability: "Build a project on a remote build PC over SSH, verify the artifacts, distribute them to target PCs and install each one only with per-PC approval."
 side_effect_level: remote_write
 approval_required: true
@@ -34,6 +34,8 @@ How this differs from neighbours:
   known-hosts entry stays the same when the address changes.
 - `~/.ssh/config` and `known_hosts` are the user's. Agent hooks often block reading or editing them;
   pass the options on the command line, and give the user the two lines to add.
+- **First contact:** `ssh -n -o BatchMode=yes <host> hostname` must print the host's name. Stop on a
+  password prompt or a host-key failure; key setup and host keys are the user's.
 - **A timeout is not proof the PC is down.** Try another channel before concluding (agent mail delivery,
   a ping by name). If the PC is up and only port 22 fails, ask its agent or owner through
   `cross-pc-messages` to check `sshd`, the firewall rule and the network profile; don't guess.
@@ -45,7 +47,8 @@ How this differs from neighbours:
 
 ## 2. Pre-flight the build host
 
-Read-only, and report the numbers:
+Report the numbers. Every check is read-only except the fast-forward pull, which is the one write to
+the build host's checkout:
 
 - Logical CPUs, free RAM and free disk on the drive holding the checkout and its target folder.
 - **No other heavy build running** (`Get-Process cargo,rustc,msbuild,node`). Another session may be

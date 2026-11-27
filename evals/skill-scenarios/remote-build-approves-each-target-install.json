@@ -20,12 +20,17 @@
     "don't run an install that replaces the app hosting this session",
     "Use the procedure's no-restart option",
     "Install on a PC the user didn't approve in this run",
-    "Edit `~/.ssh/config`, `known_hosts`, `sshd_config`, firewall rules or another PC's settings"
+    "Edit `~/.ssh/config`, `known_hosts`, `sshd_config`, firewall rules or another PC's settings",
+    " Runs only when the user types /remote-build. For a build",
+    "Record its size and SHA-256 (`Get-FileHash`), and run its version or help flag.",
+    "which is the one write to\nthe build host's checkout",
+    "`ssh -n -o BatchMode=yes <host> hostname`"
   ],
   "must_not_contain": [
     "side_effect_level: read_only",
     "git stash",
     "git reset --hard",
-    "StrictHostKeyChecking=no"
+    "StrictHostKeyChecking=no",
+    "or asks to build on another PC"
   ]
 }
