@@ -47,9 +47,12 @@ A thread is one base message and every follow-up to it, in both folders. The hel
 | Any other follow-up, either side | `<topic>-YYYY-MM-DD-<word>.md` (fix, addendum, correction, progress) | `reply --suffix <word>` |
 | Close | `<topic>-YYYY-MM-DD-done.md` | `close` |
 
-Legacy names still group where unambiguous: a note `<base>-<word>-<date>.md` joins an existing
-`<base>-<date>` thread, and `<topic>-<date>-<word>-<date2>` joins `<topic>-<date>`. `lint` suggests the
-canonical name. It also flags uppercase, date-first and undated names, entries at the share root other than
+Legacy names still group where unambiguous. A note `<base>-<word>-<date>.md` joins an existing
+`<base>-<date>` thread only when `<word>` is a follow-up word (a reply kind, `done`, `fix`, `addendum`,
+`correction`, `warning`, `update`, `notice`, `followup`) or its `Replies to:` links the base. Otherwise it
+is its own thread, as a same-day topic that extends another's name usually is.
+`<topic>-<date>-<word>-<date2>` joins `<topic>-<date>`. `lint` suggests the canonical name for the joined
+ones only. It also flags uppercase, date-first and undated names, entries at the share root other than
 `AGENTS.md`, `CLAUDE.md`, `desktop.ini`, `.sync`, `private` and the pair folders, files over
 `--max-mb` (default 25), and pair folders whose host isn't in the host table. It only reads.
 
@@ -61,11 +64,13 @@ Lifecycle: **open → done → archived.**
    standard header and a "Replies to" link. `status` hides done threads unless `--all`. A later message
    reopens the thread.
 3. **Archived:** only the thread's **sender** (the host whose folder holds the base) runs
-   `python $M archive`. It moves done threads, or with `--older-than N` threads idle for N days in both
-   directions. This is the one owner-approved exception to "only adds files":
+   `python $M archive`. It moves done threads, or with `--older-than N` finished threads idle for N days
+   in both directions. A thread still waiting on the peer is an open request: it is skipped unless
+   `--include-waiting`. This is the one owner-approved exception to "only adds files":
    - it is a **dry run by default**; `--apply` moves;
    - it moves **only its own outgoing** entries, the base and this host's own follow-ups in
-     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>-<date>/`, keeping names;
+     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>-<date>/`, keeping names
+     (older hand-made archives used `<topic>/`; the date keeps each thread's folder unique);
    - it writes a manifest (old path, new path, sha256, size) to `private/archive/cross-pc/manifests/`
      before the first move, and prints undo info;
    - it refuses other hosts' threads, anything modified in the last 10 minutes, `*.!sync` partials, and an
@@ -87,7 +92,8 @@ reaches the other PC before you finish it.
 
    Run `python $M lint --mine` before you send, and fix what it flags in your own folders.
 
-   Add `- **Reply needed:** no` to the header of a pure status note, so the thread shows as `fyi`.
+   Add `- **Reply needed:** no` to the header of a pure status note. It counts as activity but doesn't
+   change whose turn it is, and a thread of only such notes shows as `fyi`.
 2. `python $M new --to <peer> --topic <topic> --from-file draft.md [--note]` writes
    `<me>-to-<peer>/<topic>-<date>/README.md` (or one `.md` with `--note`) **only if `check` would pass**:
    no secrets and no unfilled placeholders. It refuses to overwrite. For a package with scripts or files,

@@ -29,7 +29,7 @@
       "id": "archive-own-threads",
       "prompt": "clean up the old finished threads in the shared folder",
       "should_trigger": true,
-      "expected_behavior": "Runs `archive` as a dry run first and shows the user which of this host's own threads would move and which were refused. Runs `--apply` only after the user approves, then reports the manifest path and undo info. Never moves the other host's folder or anything outside `<me>-to-<peer>`."
+      "expected_behavior": "Runs `archive` as a dry run first and shows the user which of this host's own threads would move and which were refused. With `--older-than N` it skips threads still waiting on the peer unless the user asks for `--include-waiting`. Runs `--apply` only after the user approves, then reports the manifest path and undo info. Never moves the other host's folder or anything outside `<me>-to-<peer>`."
     },
     {
       "id": "near-miss-slack",

@@ -356,5 +356,58 @@ class Archive(ShareTest):
         self.assertEqual(self.tree(), before)
 
 
+class ReviewFindings(ShareTest):
+    """Distinct threads stay distinct; fyi notes don't flip turns; --older-than keeps open requests."""
+
+    def test_legacy_join_needs_followup_word_or_link(self):
+        self.put("alpha-to-beta/ring-2026-11-20")
+        self.put("alpha-to-beta/ring-loop-2026-11-20.md")             # a distinct topic of the same day
+        self.put("beta-to-alpha/ring-loop-2026-11-20-reply.md")
+        self.put("alpha-to-beta/ring-update-2026-11-20.md")           # follow-up vocabulary: joins
+        self.put("beta-to-alpha/ring-probe-2026-11-20.md",             # links the base: joins
+                 "# p\n- **Replies to:** [`alpha-to-beta/ring-2026-11-20/README.md`]"
+                 "(../alpha-to-beta/ring-2026-11-20/README.md)\n")
+        rows = self.status()
+        self.assertEqual(rows["ring-2026-11-20"]["messages"], 3)
+        self.assertEqual(rows["ring-loop-2026-11-20"]["messages"], 2)
+        self.assertEqual(sorted(rows), ["ring-2026-11-20", "ring-loop-2026-11-20"])
+        code, out = self.run_cli("lint", "--json")
+        got = {(f["path"], f["kind"]): f["suggest"] for f in json.loads(out)}
+        self.assertEqual(got, {
+            ("alpha-to-beta/ring-update-2026-11-20.md", "suffix-before-date"): "ring-2026-11-20-update.md",
+            ("beta-to-alpha/ring-probe-2026-11-20.md", "suffix-before-date"): "ring-2026-11-20-probe.md"})
+
+    def test_fyi_followup_keeps_whose_turn_it_is(self):
+        self.put("alpha-to-beta/lamp-2026-11-20")
+        self.put("alpha-to-beta/lamp-2026-11-20-correction.md", "# note\n- **Reply needed:** no\n")
+        self.put("beta-to-alpha/fan-2026-11-20")
+        self.put("alpha-to-beta/fan-2026-11-20-status.md", "# note\n- **Reply needed:** no\n")
+        self.put("alpha-to-beta/news-2026-11-20.md", "# note\n- **Reply needed:** no\n")
+        self.put("beta-to-alpha/news-2026-11-20-ack.md", "# note\n- **Reply needed:** no\n")
+        rows = self.status()
+        self.assertEqual((rows["lamp-2026-11-20"]["state"], rows["lamp-2026-11-20"]["last"]),
+                         ("waiting on beta", "lamp-2026-11-20-correction.md"))  # still the last activity
+        self.assertEqual(rows["fan-2026-11-20"]["state"], "your turn")
+        self.assertEqual(rows["news-2026-11-20"]["state"], "fyi")  # fyi only when every message is
+
+    def test_older_than_skips_open_requests_unless_include_waiting(self):
+        self.put("alpha-to-beta/lamp-2026-10-01")                    # unanswered request: waiting on beta
+        self.put("alpha-to-beta/lamp-2026-10-01-addendum.md", "# note\n- **Reply needed:** no\n")
+        self.put("alpha-to-beta/fan-2026-10-02")
+        self.put("beta-to-alpha/fan-2026-10-02-result.md")           # answered: your turn, idle
+        self.put("alpha-to-beta/news-2026-10-03.md", "# note\n- **Reply needed:** no\n")         # fyi only
+        code, out = self.run_cli("archive", "--older-than", "30")
+        self.assertEqual(code, 0, self.stderr)
+        self.assertIn("would archive beta fan-2026-10-02 (idle", out)
+        self.assertIn("would archive beta news-2026-10-03 (idle", out)
+        self.assertNotIn("would archive beta lamp-2026-10-01", out)
+        self.assertIn("skipped lamp-2026-10-01: waiting on beta", out)
+        code, out = self.run_cli("archive", "--older-than", "30", "--include-waiting")
+        self.assertIn("would archive beta lamp-2026-10-01 (idle", out)
+        code, out = self.run_cli("archive", "--older-than", "30", "--thread", "lamp-2026-10-01")
+        self.assertEqual(code, 1)
+        self.assertIn("refused lamp-2026-10-01: waiting on beta", out)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -59,6 +59,8 @@ WORD = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 NAME = re.compile(rf"^({WORD}?)-({DATE})(?:-({WORD}))?$")
 LEGACY_BEFORE_DATE = re.compile(rf"^({WORD})-([a-z0-9]+)-({DATE})$")  # <base>-<word>-<date>, one word
 DATE_FIRST = re.compile(rf"^({DATE})-({WORD})$")
+# Words that mark a legacy <base>-<word>-<date> note as a follow-up of <base>-<date> rather than a new topic.
+FOLLOWUP_WORDS = {*REPLY_KINDS, "done", "fix", "addendum", "correction", "warning", "update", "notice", "followup"}
 ROOT_ALLOWED = {"AGENTS.md", "CLAUDE.md", "desktop.ini", ".sync", "private"}
 ARCHIVE = Path("private/archive/cross-pc")  # relative to the share root
 SETTLE_SECONDS = 600  # archive refuses threads with anything modified this recently
@@ -219,12 +221,16 @@ def thread_keyer(paths: list[Path]):
 
     1. A name that starts with an existing message's name plus `-` joins it (`x-2026-11-18-fix` -> `x-2026-11-18`).
     2. Otherwise a `<topic>-<date>-<suffix>` name anchors at `<topic>-<date>`, even when that base is gone.
-    3. Legacy suffix-before-date: a note `<base>-<word>-<date>` joins an existing `<base>-<date>` thread.
-       A package folder is always a thread of its own.
+    3. Legacy suffix-before-date: a note `<base>-<word>-<date>` joins an existing `<base>-<date>` thread
+       only as legacy_base() allows. A package folder is always a thread of its own.
     """
     stems = sorted({stem(p) for p in paths}, key=len)
     known = set(stems)
-    notes = {stem(p) for p in paths if not p.is_dir()}
+    legacy = {}
+    for p in paths:
+        base = legacy_base(p, known)
+        if base:
+            legacy[stem(p)] = base
 
     def key(s: str) -> str:
         r = next((x for x in stems if s == x or s.startswith(x + "-")), s)
@@ -232,11 +238,23 @@ def thread_keyer(paths: list[Path]):
             n = parse_name(s)
             if n["shape"] in ("followup", "second-date"):
                 r = f"{n['topic']}-{n['date']}"
-        m = LEGACY_BEFORE_DATE.match(r)
-        if m and r in notes and f"{m.group(1)}-{m.group(3)}" in known:
-            r = f"{m.group(1)}-{m.group(3)}"
-        return r
+        return legacy.get(r, r)
     return key
+
+
+def legacy_base(p: Path, known: set[str]) -> str | None:
+    """The `<base>-<date>` thread a legacy note `<base>-<word>-<date>.md` belongs to, or None.
+
+    Only when `<word>` is a follow-up word (FOLLOWUP_WORDS) or the note's "Replies to:" links the base:
+    a same-day topic that merely extends another one's name (`x-<other>-<date>`) stays its own thread.
+    """
+    m = LEGACY_BEFORE_DATE.match(stem(p)) if not p.is_dir() else None
+    if not m or f"{m.group(1)}-{m.group(3)}" not in known:
+        return None
+    base = f"{m.group(1)}-{m.group(3)}"
+    if m.group(2) in FOLLOWUP_WORDS:
+        return base
+    return base if base in {stem(Path(n)) for _, n in REPLY_LINK.findall(replies_field(header(p)))} else None
 
 
 # -- commands -----------------------------------------------------------------------------------
@@ -305,13 +323,22 @@ def archived_at(c: dict, peer: str, thread: str) -> float | None:
     return None
 
 
+def turn_state(ms: list, peer: str) -> str:
+    """Whose turn, from the newest message that needs a reply; fyi messages count only for activity."""
+    need = [m for m in ms if not m[3]]
+    if not need:
+        return "fyi"
+    return "your turn" if need[-1][1] == "in" else f"waiting on {peer}"
+
+
 def threads(c: dict, since_days: float | None, show_done: bool = False) -> list[dict]:
     """Group each peer's messages (both directions) into threads (see thread_keyer).
 
     ``<topic>-<date>-reply.md``, ``-result.md`` and any other ``<topic>-<date>-<word>`` belong to ``<topic>-<date>``.
-    The thread's state comes from its newest message: from the peer means it's your turn.
+    Whose turn it is comes from the newest message that needs a reply: from the peer means it's your turn.
     A message whose "Replies to:" line links ``<other-folder>/<item>`` also counts in ``<item>``'s thread,
-    so one reply can answer several topics. ``- **Reply needed:** no`` on the newest message makes it ``fyi``;
+    so one reply can answer several topics. ``- **Reply needed:** no`` marks a message fyi: it moves the
+    thread's last activity but not the turn, and a thread of only fyi messages is ``fyi``;
     a newest ``-done`` message makes it ``done``, and an archive folder with no newer message left in the share
     makes it ``archived`` (both hidden unless show_done).
     """
@@ -320,7 +347,7 @@ def threads(c: dict, since_days: float | None, show_done: bool = False) -> list[
     for peer in sorted(set(c["incoming"]) | set(c["outgoing"])):
         groups, _ = thread_groups(c, peer)
         for root, ms in groups.items():
-            last_t, last_d, last_name, fyi = ms[-1]
+            last_t, last_d, last_name, _ = ms[-1]
             if cutoff and last_t < cutoff:
                 continue
             archived = archived_at(c, peer, root)
@@ -328,8 +355,7 @@ def threads(c: dict, since_days: float | None, show_done: bool = False) -> list[
             done = archived or is_done(root, ms)
             if done and not show_done:
                 continue
-            state = ("archived" if archived else "done" if done else "fyi" if fyi
-                     else ("your turn" if last_d == "in" else f"waiting on {peer}"))
+            state = "archived" if archived else "done" if done else turn_state(ms, peer)
             out.append({"peer": peer, "thread": root, "messages": len(ms), "last": last_name,
                         "last_from": peer if last_d == "in" else c["host"],
                         "modified": dt.datetime.fromtimestamp(last_t).strftime("%Y-%m-%d %H:%M"),
@@ -536,7 +562,7 @@ def name_issue(p: Path, stems: set[str]) -> tuple[str | None, str, str | None]:
         return shape, "names are lowercase", (s.lower() + ext) if low in ("base", "followup") else None
     if shape == "base":
         m = LEGACY_BEFORE_DATE.match(s)
-        if m and not p.is_dir() and f"{m.group(1)}-{m.group(3)}" in stems:
+        if m and legacy_base(p, stems):
             return ("suffix-before-date", "follow-ups are <topic>-<date>-<word>.md",
                     f"{m.group(1)}-{m.group(3)}-{m.group(2)}{ext}")
         return None, "", None
@@ -624,7 +650,8 @@ def cmd_archive(args) -> int:
     """Move this host's finished threads out of its own <me>-to-<peer> folders. Dry run unless --apply.
 
     A candidate thread starts in <me>-to-<peer> (this host sent its first message) and is done, or with
-    --older-than N has had no message in either direction for N days. Only this host's own entries move
+    --older-than N has had no message in either direction for N days and is finished: an open request
+    (waiting on the peer) qualifies only with --include-waiting. Only this host's own entries move
     (the base and its follow-ups there); the peer's folder is never touched. Refused: anything modified
     in the last 10 minutes, *.!sync partials, an existing destination.
     """
@@ -633,7 +660,7 @@ def cmd_archive(args) -> int:
     if args.to:
         outbox(c, args.to)
     rel = lambda p: p.relative_to(root).as_posix()  # noqa: E731
-    plans, refused, seen = [], [], False
+    plans, refused, skipped, seen = [], [], [], False
     for peer in ([args.to] if args.to else sorted(c["outgoing"])):
         box, inbox = c["outgoing"].get(peer), c["incoming"].get(peer)
         if box is None:
@@ -658,6 +685,11 @@ def cmd_archive(args) -> int:
                 reason = "done"
             elif args.older_than is not None and idle > args.older_than:
                 reason = f"idle {idle:.0f} days"
+                state = turn_state(ms, peer)
+                if state.startswith("waiting on") and not args.include_waiting:
+                    why = f"{state} (an open request); pass --include-waiting to archive it"
+                    (refused if args.thread else skipped).append((thread, why))
+                    continue
             else:
                 if args.thread:
                     refused.append((thread, "not done: close it first, or pass --older-than N"))
@@ -686,9 +718,11 @@ def cmd_archive(args) -> int:
               f"{len(p['moves'])} entries -> {rel(p['dest'])}/")
         for src, _ in p["moves"]:
             print(f"  {rel(src)}{'/' if src.is_dir() else ''}")
+    for thread, why in skipped:
+        print(f"skipped {thread}: {why}")
     for thread, why in refused:
         print(f"refused {thread}: {why}")
-    if not plans and not refused:
+    if not plans and not refused and not skipped:
         print("No threads to archive (done, or idle with --older-than N).")
     if plans and not args.apply:
         print("Dry run: nothing moved. Re-run with --apply to move these entries out of your own folders.")
@@ -898,7 +932,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("archive", help="move own done threads to private/archive/cross-pc (dry run unless --apply)")
     p.add_argument("--to", help="only threads with this peer")
     p.add_argument("--thread", help="only this thread, e.g. setup-2026-11-14")
-    p.add_argument("--older-than", type=float, help="also threads with no message for N days")
+    p.add_argument("--older-than", type=float, help="also finished threads with no message for N days")
+    p.add_argument("--include-waiting", action="store_true",
+                   help="with --older-than: also threads waiting on the peer (an open request)")
     p.add_argument("--apply", action="store_true", help="really move; prints the manifest and undo info")
     p = sub.add_parser("watch")
     p.add_argument("--once", action="store_true", help="exit after the first batch of events")
