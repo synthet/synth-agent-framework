@@ -60,6 +60,17 @@ class Readable(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.check_readable(bad)
 
+    def test_device_names_refused(self):
+        for bad in ["CON", "aux.txt", "docs\\nul", "LPT1.log"]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.safe_rel(bad)
+        self.assertEqual(cps.safe_rel("console.md"), "console.md")
+
+    def test_more_secret_names(self):
+        for bad in [".envrc", "prod.env", "auth.json"]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_readable(bad)
+
     def test_outer_spaces_are_stripped_before_the_check(self):
         with self.assertRaises(cps.UsageError):
             cps.check_readable(cps.safe_rel(".env "))
@@ -92,6 +103,20 @@ class GitArgs(unittest.TestCase):
                     ["blame", "-S", "revs", "f"], ["ls-files", "-X", "ex.txt"], ["ls-files", "--exclude-from=e"],
                     ["diff", "../outside.txt", "x"], ["diff", "C:\\Windows\\win.ini", "x"], ["log", "--", "/etc"],
                     ["show", "HEAD:../x"], ["diff", "C:x", "y"], ["diff", "\\\\server\\share\\f", "x"]]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_git_args(bad)
+
+    def test_quotes_and_trailing_backslash_refused(self):
+        # Windows PowerShell 5.1 drops embedded quotes when it builds git's command line.
+        for bad in [["log", '-"-output=x.txt"'], ["grep", '-"-open=cmd"', "x"], ["diff", '"C:/Windows/win.ini"', "f"],
+                    ["log", "a b\\", "x"]]:
+            with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
+                cps.check_git_args(bad)
+
+    def test_secret_files_unreachable_through_git(self):
+        for bad in [["grep", "-e", "TOKEN", "--", ".env"], ["show", "HEAD:.env"], ["cat-file", "-p", "HEAD:config/secrets.json"],
+                    ["grep", "--untracked", "-e", "TOKEN"], ["grep", "--no-exclude-standard", "x"], ["log", "--show-signature"],
+                    ["show", "--textconv", "HEAD"], ["cat-file", "--filters", "HEAD:a"], ["show", "HEAD:.git/config"]]:
             with self.subTest(bad=bad), self.assertRaises(cps.UsageError):
                 cps.check_git_args(bad)
 
@@ -160,13 +185,15 @@ class Cache(unittest.TestCase):
         cps.forget(cache, self.LOCAL, "laptop")
         self.assertIsNone(cps.recall(cache, self.LOCAL, "laptop"))
 
-    def test_shallow_target_survives_the_cache(self):
+    def test_shallow_target_is_never_served_from_the_cache(self):
         cache = {}
         found = {"path": "F:\\code\\widget", "shallow": True, "roots": ["c" * 40]}
         cps.remember(cache, self.LOCAL, "laptop", found["path"], "t", found)
-        self.assertEqual(cps.recalled_target(cache, self.LOCAL, "laptop"), found)
+        self.assertNotIn("roots", cache["github.com/acme/widget"]["peers"]["laptop"])
+        self.assertIsNone(cps.recalled_target(cache, self.LOCAL, "laptop"))
         cps.remember(cache, self.LOCAL, "desk", "G:\\w", "t", {"path": "G:\\w", "roots": ["a" * 40]})
-        self.assertEqual(cps.recalled_target(cache, self.LOCAL, "desk"), {"path": "G:\\w", "shallow": False, "roots": []})
+        self.assertEqual(cps.recalled_target(cache, self.LOCAL, "desk"), {"path": "G:\\w"})
+        self.assertIsNone(cps.recalled_target(cache, dict(self.LOCAL, shallow=True), "desk"))
 
     def test_entry_with_other_root_is_ignored(self):
         cache = {}

@@ -49,7 +49,7 @@ SECRET_DIRS = {".git", ".ssh", ".gnupg", ".aws", ".azure", ".kube"}
 SECRET_NAMES = [re.compile(p, re.I) for p in (
     r"^\.env(\..+)?$", r"^secrets?(\..+)?$", r"^credentials?(\..+)?$", r".*\.(pem|key|pfx|p12|kdbx|ppk)$",
     r"^id_(rsa|dsa|ecdsa|ed25519)(_sk)?(\.pub)?$", r"^\.(npmrc|pypirc|netrc|git-credentials)$",
-    r"^settings\.local\.json$", r"^mcp\.json$", r"^\.claude\.json$")]
+    r"^settings\.local\.json$", r"^mcp\.json$", r"^\.claude\.json$", r"^\.envrc$", r".*\.env$", r"^auth\.json$")]
 SAFE_NAMES = [re.compile(p, re.I) for p in (r"^\.env\.(example|sample|template)$",)]
 
 READ_ONLY_GIT = {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-tree", "describe", "blame",
@@ -57,7 +57,9 @@ READ_ONLY_GIT = {"status", "log", "diff", "show", "rev-parse", "ls-files", "ls-t
 # Long options that write files, run programs or read files outside the checkout. git accepts any unambiguous
 # abbreviation (--outp, --open=), so an option is refused when it is a prefix of one of these.
 GIT_DENIED_LONG = ("output", "open-files-in-pager", "exec", "ext-diff", "no-index", "contents", "config", "file",
-                   "orderfile", "ignore-revs-file", "exclude-from", "pathspec-from-file", "upload-pack")
+                   "orderfile", "ignore-revs-file", "exclude-from", "pathspec-from-file", "upload-pack",
+                   # read untracked or ignored files (secrets), or run programs from the peer's git config
+                   "untracked", "no-exclude-standard", "textconv", "show-signature", "filters")
 # Short option letters with the same effect, anywhere in a cluster (-nf, -Ofile). -O: pager or order file.
 GIT_DENIED_SHORT = {"*": "O", "grep": "f", "blame": "S", "ls-files": "X"}
 
@@ -103,6 +105,8 @@ def safe_rel(rel: str | None) -> str:
     # reach a different file than the one the local checks saw.
     if any(p.endswith((".", " ")) or re.search(r"~\d", p) for p in parts):
         raise UsageError(f"path segments may not end in a dot or space or be 8.3 short names: {rel!r}")
+    if any(re.fullmatch(r"(con|prn|aux|nul|com\d|lpt\d)(\..*)?", p, re.I) for p in parts):
+        raise UsageError(f"path segments may not be Windows device names: {rel!r}")
     return "\\".join(parts)
 
 
@@ -124,6 +128,10 @@ def check_git_args(args: list[str]) -> list[str]:
         raise UsageError(f"git {args[0]} is not allowed; read-only subcommands: {', '.join(sorted(READ_ONLY_GIT))}")
     sub, letters = args[0], GIT_DENIED_SHORT["*"] + GIT_DENIED_SHORT.get(args[0], "")
     for a in args[1:]:
+        # Windows PowerShell 5.1 drops embedded double quotes and lets a trailing backslash join the next
+        # argument when it builds a native command line, so git would see another option than the one checked.
+        if '"' in a or a.endswith("\\"):
+            raise UsageError(f"git argument {a!r} has a double quote or ends in a backslash")
         if a == "--":
             continue
         if a.startswith("--"):
@@ -135,6 +143,11 @@ def check_git_args(args: list[str]) -> list[str]:
                 raise UsageError(f"git option {a} is not allowed for git {sub}")
         elif path_escapes(a):
             raise UsageError(f"git argument {a!r} points outside the checkout")
+        else:
+            # A pathspec or rev:path must not name a file cat would refuse (git grep, show HEAD:.env, cat-file).
+            spec = a.split(":", 1)[1] if re.match(r"^[^:/\\]*:", a) else a
+            if spec:
+                check_readable(spec.replace("/", "\\"))
     return args
 
 
@@ -197,12 +210,12 @@ def want_roots(local: dict, target: dict) -> list[str]:
 
 
 def recalled_target(cache: dict, local: dict, peer: str) -> dict | None:
-    """The remembered peer checkout as a target ({path, shallow, roots}), or None."""
+    """The remembered peer checkout as a target, or None. A shallow match is never served from the cache: its
+    guard roots come from the peer itself, and roots read from a cache file could point at another repo."""
     path = recall(cache, local, peer)
-    if not path:
+    if not path or local.get("shallow") or cache[cache_key(local)]["peers"][peer].get("shallow"):
         return None
-    entry = cache[cache_key(local)]["peers"][peer]
-    return {"path": path, "shallow": bool(entry.get("shallow")), "roots": list(entry.get("roots") or [])}
+    return {"path": path}
 
 
 def recall(cache: dict, local: dict, peer: str) -> str | None:
@@ -218,7 +231,7 @@ def remember(cache: dict, local: dict, peer: str, remote_path: str, when: str, f
     entry.update({"github": local["origin"], "root": local["roots"][0], "local": local["path"]})
     record: dict = {"path": remote_path, "found": when}
     if found and (found.get("shallow") or local.get("shallow")):
-        record.update({"shallow": bool(found.get("shallow")), "roots": list(found.get("roots") or [])})
+        record["shallow"] = True  # remembered only so the next call searches again
     entry.setdefault("peers", {})[peer] = record
 
 
@@ -467,7 +480,9 @@ def main(argv: list[str] | None = None) -> int:
         target = cached or search()
         if a.cmd == "locate":
             if cached:
-                with_target(lambda t, retry: run_payload(peer, t, local, "", retry=retry))
+                rc = with_target(lambda t, retry: run_payload(peer, t, local, "", retry=retry))
+                if rc != 0:
+                    return rc
             info = {"peer": peer, "path": target["path"], "origin": target.get("origin"),
                     "origin_matches": target.get("slug") == local["slug"] if "slug" in target else None,
                     "worktree": bool(target.get("worktree")), "root": local["roots"][0],
@@ -497,7 +512,7 @@ def main(argv: list[str] | None = None) -> int:
                                "[Console]::Out.Write([Text.Encoding]::UTF8.GetString($b,0,$n));"
                                "if($b.Length -gt $n){[Console]::Error.WriteLine(\"[truncated at $n of $($b.Length) bytes]\")}", retry=retry))
         if a.cmd == "git":
-            args = check_git_args([x for x in a.args if x != "--"] if a.args[:1] == ["--"] else a.args)
+            args = check_git_args(a.args[1:] if a.args[:1] == ["--"] else a.args)
             return with_target(lambda t, retry: run_payload(peer, t, local, "$env:GIT_PAGER='cat';& git --no-pager " +
                                " ".join(ps_quote(x) for x in args), retry=retry))
         if a.cmd == "agent":
