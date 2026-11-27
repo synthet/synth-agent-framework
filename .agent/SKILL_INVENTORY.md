@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-26. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-27. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -30,6 +30,7 @@ commands or edit code/config as part of its procedure.
 | export-chat | Export the Cursor agent transcript to Markdown or the clipboard, like Claude Code `/export` | L2 | 2026-10-01 |
 | karpathy-guidelines | Deliberate coding checklist: assumptions, simplicity, surgical diffs, verifiable goals | L2 | 2026-07-14 |
 | lesson-to-skill | Turn session corrections, mistakes, and repetitions into enriched or new agent assets | L2 | 2026-07-25 |
+| elaborate-spec | Ground an external spec or roadmap in the repo: prior-work search, area explorers, first-hand verification, per-item specs, tasks, checker (`scripts/spec_checks.py`) and a T-n agent-flow import table | L2 | 2026-11-27 |
 | mcp-server-design | Design MCP servers with safe transport, discoverable tools, pagination, and validation | L1 | 2026-07-14 |
 | synthet-repos | Map a task to the public synthet repository that owns it | L1 | 2026-11-07 |
 | release-bump | Semver bump, changelog promotion, release commit prep (**compiled harness**) | L2 | 2026-07-19 |
@@ -44,7 +45,7 @@ commands or edit code/config as part of its procedure.
 | decide-with-agents | Settle decisions, research questions and plan approvals: sub-agents chosen by task complexity (Fable, Opus, Sonnet), checking their claims, a final Jev call and a provenance receipt | L2 | 2026-11-19 |
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
 | build | Build the current project for this OS with its own procedure (recipe, release script, documented command, else the ecosystem default) and check each artifact by running it. Never installs | L2 | 2026-11-21 |
-| deploy | Install a fresh build on this machine only: the project procedure first, else a per-user install folder with a backup, PATH-folder tools, and shortcuts with new icon names; stops on running or locked targets; reads everything back. User-typed only | L2 | 2026-11-21 |
+| deploy | Install a fresh build on this machine only: the project procedure first, else a per-user install folder with a backup, PATH-folder tools, and shortcuts with new icon names; stops on running or locked targets; reads everything back. User-typed only | L2 | 2026-11-27 |
 | fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
 | step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
 | ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |
@@ -119,7 +120,7 @@ specializations remain authoritative. Review notes and trigger cases are in
 | flow-land | End-of-session handoff for agent-flow tickets | L1 | 2026-11-06 |
 | flow-loop | Capped autonomous agent-flow ticket loop under a run contract; explicit invocation only | L2 | 2026-11-06 |
 | flow-next | Claim the next ready agent-flow ticket and set up its branch or worktree | L1 | 2026-11-06 |
-| flow-plan | Turn a request or spec into agent-flow tickets with dependencies | L1 | 2026-11-06 |
+| flow-plan | Turn a request or spec into agent-flow tickets with dependencies | L1 | 2026-11-27 |
 | flow-review | Review an agent-flow ticket against its acceptance criteria | L2 | 2026-11-06 |
 | flow-status | Read-only agent-flow board summary | L1 | 2026-11-06 |
 | flow-work | Implement a claimed agent-flow ticket test-first and record evidence | L1 | 2026-11-06 |

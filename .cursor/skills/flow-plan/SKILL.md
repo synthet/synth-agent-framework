@@ -40,6 +40,8 @@ Split along module boundaries. Express ordering as dependencies (`Depends on: T-
 
 Always show the dry run to the user and get approval before the real import. Re-imports are idempotent: each ticket keeps an external key of `file#T-n`.
 
+The framework parser takes the first table with `T-n` IDs, keeps only `T-n` dependencies and exact `AC-n` cells, and reads each AC's text from one `AC-n` line. Task IDs like `AGT-02.3` or item-scoped `AGT-02/AC-1` therefore don't import. Generate a `T-n` table with the `elaborate-spec` skill's `scripts/spec_checks.py import-table` instead of renaming the source.
+
 ## 4. After the import
 - `agent-flow tree <epic>` checks the dependency graph.
 - `agent-flow edit <id> --add-label agent-ok` marks tickets an autonomous loop may take.
