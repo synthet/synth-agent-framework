@@ -547,6 +547,13 @@
       "projects": []
     },
     {
+      "id": "repo-inventory",
+      "source": ".claude/skills/repo-inventory",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
       "pack": "global",
