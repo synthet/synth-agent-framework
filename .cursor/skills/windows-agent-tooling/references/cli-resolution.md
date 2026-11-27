@@ -25,6 +25,9 @@ in another terminal, or authentication/model availability differs between execut
 4. If PowerShell blocks an npm `.ps1` launcher, invoke the matching `.cmd` launcher to diagnose
    the installation without changing execution policy. If the user needs the bare command,
    treat this as a diagnostic workaround until persistent command resolution is verified.
+5. In scripts that launch a CLI, especially under `-NoProfile` or over SSH, resolve it with
+   `Get-Command <cli> -CommandType Application` (.exe/.cmd only). A blocked `.ps1` shim prints an error
+   but leaves PowerShell's exit code at 0, so the failure looks like an empty result.
 
 Why: a profile function can force an old executable even when npm and PATH point at a newer copy.
 

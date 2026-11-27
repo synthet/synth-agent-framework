@@ -80,7 +80,9 @@ alone, and the guard then accepts exactly the boundary commits recorded when it 
   through files written into the peer checkout.
 
 Windows OpenSSH details (cmd.exe default shell, encoded PowerShell, stdin and long-running processes):
-[`../cross-pc-messages/references/remote-ops.md`](../cross-pc-messages/references/remote-ops.md).
+[`../cross-pc-messages/references/remote-ops.md`](../cross-pc-messages/references/remote-ops.md). Before you
+change the helper's remote scripts, read [`references/remote-powershell.md`](references/remote-powershell.md):
+Unicode quotes, PowerShell 5.1 argument passing, and launching CLIs as applications.
 
 Tests: `python -m unittest discover -s <this skill's directory>/scripts -p "test_*.py"`
 

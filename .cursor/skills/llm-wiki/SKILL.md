@@ -38,4 +38,12 @@ Writes and review require elevated MCP flags (`--allow-writes` / `--allow-review
 commands with the user's reviewer identity. Generated facts stay `candidate` until human review.
 After canonical changes: `llmwiki --root "<wiki-root>" validate` then `render`.
 
+## Copy a store to another PC
+
+- `export` is read-only. Move the file over SMB or SSH, with its size and SHA-256, never through a synced chat folder.
+- `import` only works on an **empty** store (`import_target_not_empty`), so it can't merge. On the receiver: stop anything using the store, back up the whole store folder, import into a fresh store, then re-ingest or refresh the sources only that PC had.
+- Different drive letters: rewrite paths only in `sources.original_uri` and `sources.source_key` on a copy of the export, never inside objects. Check that the keys stay unique.
+- Until the import orders it, sort `claim_revisions` so a row comes after the row it supersedes (`supersedes_revision_id`); otherwise the import fails with `FOREIGN KEY constraint failed`.
+- Check with `stats` (compare the counts with the exporter's) and `validate`, then `index`.
+
 Consult the target wiki's `AGENTS.md`, `docs/schema.md` and current CLI help for its schema and modes.

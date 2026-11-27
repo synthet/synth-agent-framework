@@ -20,6 +20,16 @@ The library manifest assigns skills to tiers: shared skills install at user leve
 
 Use the local receipt and subsequent plan as evidence; file installation alone does not prove a remote MCP is healthy or an IDE has reloaded it.
 
+## Installing one skill
+
+`plan` has no per-skill option. To take in one skill (for example after its PR merges), make the full plan, then keep only that skill's operations:
+
+1. `plan --scope global --state <state> --out <state>/plan-full.json`. Use **the `--state` folder your earlier installs used**: the one holding `targets/*.json`, by default `.agent/local/setup` in the checkout that ran them. A scratch worktree has its own default and no ownership ledger, so its plan shows hundreds of unrelated creates and conflicts.
+2. Write a copy of the plan that keeps only the operations whose `relative` path is under `<tree>/<skill>/` for the four user skill trees (`.claude/skills`, `.agents/skills`, `.gemini/config/skills`, `.gemini/antigravity-cli/skills`). Update `summary` to match.
+3. Have the user review that list, then `apply --input <cut plan>` and `check --input <receipt>`.
+
+This is safe because `apply` checks every operation it is given (library and installer hashes, the target root, the destination folder, the content hashes) without requiring the full list. Conflicts are skipped and recorded in the receipt. The ownership ledger merges, so other skills' entries stay.
+
 ## Tracked repository copies
 
 `plan` needs an ownership ledger, so it can't remove tracked copies from a repository that has none. `tracked-retire --project <name> --out <report.json>` lists them instead and changes nothing. A skill is listed only if every copy, in every tree, is committed, unedited, unreferenced by the repository, and equal to some past library version. The report says why anything else stays.
