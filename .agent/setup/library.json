@@ -547,6 +547,13 @@
       "projects": []
     },
     {
+      "id": "elaborate-spec",
+      "source": ".claude/skills/elaborate-spec",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
       "pack": "global",

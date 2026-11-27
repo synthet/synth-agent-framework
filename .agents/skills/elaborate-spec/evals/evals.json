@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": "elaborate-downloads-spec",
-      "prompt": "elaborate C:\\Users\\me\\Downloads\\product-roadmap-2026-11-26.md",
+      "prompt": "elaborate ~/Downloads/product-roadmap-2026-11-26.md",
       "should_trigger": true,
       "expected_behavior": "Counts backlog IDs, pins the baseline sha, asks what deliverable if unclear, searches branches/tracker/wiki for prior work, fans out explorers, verifies load-bearing claims first-hand, writes spec.md + items + tasks, runs spec_checks.py coverage/graph/paths."
     },
