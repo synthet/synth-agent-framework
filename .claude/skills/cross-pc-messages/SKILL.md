@@ -69,12 +69,12 @@ Lifecycle: **open → done → archived.**
    `--include-waiting`. This is the one owner-approved exception to "only adds files":
    - it is a **dry run by default**; `--apply` moves;
    - it moves **only its own outgoing** entries, the base and this host's own follow-ups in
-     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>/<date>/`, keeping names.
-     Each thread nests by date under its topic, so a reused topic never collides;
+     `<me>-to-<peer>`, into `private/archive/cross-pc/<me>-to-<peer>/<topic>/`, keeping names. The
+     names carry the date, so threads of a reused topic sit side by side;
    - it writes a manifest (old path, new path, sha256, size) to `private/archive/cross-pc/manifests/`
      before the first move, and prints undo info;
-   - it refuses other hosts' threads, anything modified in the last 10 minutes, `*.!sync` partials, and an
-     existing destination.
+   - it refuses other hosts' threads, anything modified in the last 10 minutes, `*.!sync` partials, and any
+     moved entry whose target name already exists there.
 
    Show the user the dry run and get approval before `--apply`. The peer's replies stay in its own folder;
    `status` on both hosts shows the thread as `archived` (only with `--all`) until a newer message reopens it.

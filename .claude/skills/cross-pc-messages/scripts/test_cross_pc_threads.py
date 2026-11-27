@@ -272,7 +272,7 @@ class Archive(ShareTest):
         code, out = self.run_cli("archive")
         self.assertEqual(code, 0, self.stderr)
         self.assertIn(f"would archive beta {topic} (done): 2 entries -> "
-                      "private/archive/cross-pc/alpha-to-beta/print-queue/2026-11-19/", out)
+                      "private/archive/cross-pc/alpha-to-beta/print-queue/\n", out)
         self.assertIn("--apply", out)
         self.assertEqual(self.tree(), before)
         self.assertFalse((self.root / "private").exists())
@@ -286,7 +286,7 @@ class Archive(ShareTest):
                  f"# r\n- **Replies to:** [`beta-to-alpha/{topic}-result.md`](../beta-to-alpha/{topic}-result.md)\n", when=OLD)
         code, out = self.run_cli("archive", "--apply")
         self.assertEqual(code, 0, self.stderr)
-        dest = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "print-queue" / "2026-11-19"
+        dest = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "print-queue"
         self.assertTrue((dest / topic / "README.md").is_file())
         self.assertTrue((dest / topic / "run.ps1").is_file())
         self.assertTrue((dest / f"{topic}-ack.md").is_file())
@@ -303,7 +303,7 @@ class Archive(ShareTest):
         data = json.loads(manifests[0].read_text(encoding="utf-8"))
         files = {f["old"]: f for m in data["moves"] for f in m["files"]}
         f = files[f"alpha-to-beta/{topic}/run.ps1"]
-        self.assertEqual(f["new"], f"private/archive/cross-pc/alpha-to-beta/print-queue/2026-11-19/{topic}/run.ps1")
+        self.assertEqual(f["new"], f"private/archive/cross-pc/alpha-to-beta/print-queue/{topic}/run.ps1")
         self.assertEqual(f["size"], len(b"echo hi\n") + (1 if os.linesep == "\r\n" else 0))
         self.assertEqual(len(f["sha256"]), 64)
         self.assertEqual(len(files), 3)
@@ -325,16 +325,34 @@ class Archive(ShareTest):
         self.put(f"beta-to-alpha/{topic}-question.md", when=time.time() + 60)  # a newer message reopens it
         self.assertEqual(self.status()[topic]["state"], "your turn")
 
-    def test_reused_topic_nests_by_date_beside_older_archives(self):
+    def test_reused_topic_lands_beside_older_archives(self):
         older = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "print-queue"
-        (older / "2026-10-01").mkdir(parents=True)       # an earlier thread of the same topic
+        (older / "print-queue-2026-10-01").mkdir(parents=True)  # an earlier thread of the same topic
+        (older / "print-queue-2026-10-01" / "README.md").write_text("# old\n", encoding="utf-8")
         (older / "notes.md").write_text("hand-made\n", encoding="utf-8")  # an older hand-made <topic>/ archive
         topic = self.done_thread()
         code, out = self.run_cli("archive", "--apply")
         self.assertEqual(code, 0, self.stderr)
-        self.assertTrue((older / "2026-11-19" / topic / "README.md").is_file())
-        self.assertTrue((older / "notes.md").is_file() and (older / "2026-10-01").is_dir())
+        self.assertTrue((older / topic / "README.md").is_file())
+        self.assertTrue((older / f"{topic}-ack.md").is_file())
+        self.assertEqual((older / "notes.md").read_text(encoding="utf-8"), "hand-made\n")
+        self.assertTrue((older / "print-queue-2026-10-01" / "README.md").is_file())
         self.assertEqual(self.status("--all")[topic]["state"], "archived")
+
+    def test_idle_archive_hides_the_peers_leftover_reply(self):
+        self.put("alpha-to-beta/fan-2026-10-02")
+        self.put("beta-to-alpha/fan-2026-10-02-result.md")  # newer than anything alpha archives
+        self.assertEqual(self.run_cli("archive", "--older-than", "30", "--apply")[0], 0, self.stderr)
+        self.assertEqual(self.status(), {})
+        self.assertEqual(self.status("--all")["fan-2026-10-02"]["state"], "archived")
+        with mock.patch.dict(os.environ, {"CROSS_PC_HOST": "beta"}):
+            self.assertEqual(self.status(), {})
+
+    def test_undated_thread_archives_under_its_name(self):
+        self.put("alpha-to-beta/keys.md")
+        self.put("beta-to-alpha/keys-done.md")
+        self.assertEqual(self.run_cli("archive", "--apply")[0], 0, self.stderr)
+        self.assertTrue((self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "keys" / "keys.md").is_file())
 
     def test_open_thread_needs_older_than(self):
         self.put("alpha-to-beta/fan-curve-2026-10-01")
@@ -351,7 +369,9 @@ class Archive(ShareTest):
         partial = self.done_thread("partial-2026-11-19")
         (self.out_dir / partial / "big.zip.!sync").write_text("p", encoding="utf-8")
         taken = self.done_thread("taken-2026-11-18")
-        (self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "taken" / "2026-11-18").mkdir(parents=True)
+        old = self.root / "private" / "archive" / "cross-pc" / "alpha-to-beta" / "taken"
+        old.mkdir(parents=True)
+        (old / f"{taken}-ack.md").write_text("an earlier copy\n", encoding="utf-8")  # one target entry exists
         self.put("beta-to-alpha/theirs-2026-11-17")
         self.put("beta-to-alpha/theirs-2026-11-17-done.md")
         before = self.tree()
@@ -359,7 +379,7 @@ class Archive(ShareTest):
         self.assertEqual(code, 1)
         self.assertIn(f"refused {recent}: modified in the last 10 minutes", out)
         self.assertIn(f"refused {partial}: partial download", out)
-        self.assertIn(f"refused {taken}: destination exists", out)
+        self.assertIn(f"refused {taken}: destination exists: private/archive/cross-pc/alpha-to-beta/taken/{taken}-ack.md", out)
         self.assertNotIn("theirs", out)  # not mine to archive: never a candidate
         self.assertEqual(self.tree(), before)
         code, out = self.run_cli("archive", "--thread", "theirs-2026-11-17", "--apply")

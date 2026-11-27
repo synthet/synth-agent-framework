@@ -312,21 +312,43 @@ def is_done(thread: str, ms: list) -> bool:
 
 
 def archive_dir(root: Path, pair: str, thread: str) -> Path:
-    """private/archive/cross-pc/<pair>/<topic>/<date>/: groups a reused topic, and older <topic>/ archives, by date."""
+    """private/archive/cross-pc/<pair>/<topic>/ (an undated thread uses its own name as the topic).
+
+    Entries keep their names, which carry the date, so threads of a reused topic sit side by side.
+    """
     n = parse_name(thread)
-    topic, date = (n["topic"], n["date"]) if n["date"] else (thread, "undated")
-    return root / ARCHIVE / pair / topic / date
+    return root / ARCHIVE / pair / (n["topic"] if n["date"] else thread)
 
 
-def archived_at(c: dict, peer: str, thread: str) -> float | None:
-    """When a thread was archived (by either side), or None: its archive folder's newest time.
+def archive_marks(root: Path) -> dict[tuple[str, str], float]:
+    """(pair, thread) -> when the newest manifest that moved it was written."""
+    marks: dict[tuple[str, str], float] = {}
+    folder = root / ARCHIVE / "manifests"
+    for f in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            when = dt.datetime.fromisoformat(data["created"]).timestamp()
+            for m in data["moves"]:
+                pair = m["entries"][0]["new"].split("/")[3]  # private/archive/cross-pc/<pair>/...
+                marks[(pair, m["thread"])] = max(when, marks.get((pair, m["thread"]), 0.0))
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            continue
+    return marks
 
-    Renames keep file times, so the newest of the folder's own mtime and its messages bounds the archive time.
+
+def archived_at(c: dict, peer: str, thread: str, marks: dict) -> float | None:
+    """When a thread was archived (by either side), or None.
+
+    A thread is archived when its base sits in its archive folder. The time is the newest of its own archived
+    entries (renames keep file times) and the manifest that moved it, so a reply the peer left behind, older
+    than the archive run, doesn't revive it.
     """
     for pair in (f"{c['host']}-to-{peer}", f"{peer}-to-{c['host']}"):
         d = archive_dir(c["root"], pair, thread)
-        if d.is_dir():
-            return max([d.stat().st_mtime] + [written(p) for p in d.iterdir() if not ignored(p)])
+        own = [p for p in d.iterdir() if not ignored(p) and (stem(p) == thread or stem(p).startswith(thread + "-"))] \
+            if d.is_dir() else []
+        if any(stem(p) == thread for p in own):
+            return max([written(p) for p in own] + ([marks[(pair, thread)]] if (pair, thread) in marks else []))
     return None
 
 
@@ -353,11 +375,12 @@ def threads(c: dict, since_days: float | None, show_done: bool = False) -> list[
     out = []
     for peer in sorted(set(c["incoming"]) | set(c["outgoing"])):
         groups, _ = thread_groups(c, peer)
+        marks = archive_marks(c["root"]) if groups else {}
         for root, ms in groups.items():
             last_t, last_d, last_name, _ = ms[-1]
             if cutoff and last_t < cutoff:
                 continue
-            archived = archived_at(c, peer, root)
+            archived = archived_at(c, peer, root, marks)
             archived = archived is not None and last_t <= archived
             done = archived or is_done(root, ms)
             if done and not show_done:
@@ -711,8 +734,9 @@ def cmd_archive(args) -> int:
                 refused.append((thread, "partial download (*.!sync) in the thread; wait for the sync"))
             elif ms[-1][0] > now - SETTLE_SECONDS:
                 refused.append((thread, "modified in the last 10 minutes"))
-            elif dest.exists():
-                refused.append((thread, f"destination exists: {rel(dest)}"))
+            elif any((dest / p.name).exists() for p in entries):
+                taken = next(dest / p.name for p in sorted(entries) if (dest / p.name).exists())
+                refused.append((thread, f"destination exists: {rel(taken)}"))
             elif any(p.parent.resolve() != box.resolve() or not box.name.startswith(f"{me}-to-") for p in entries):
                 refused.append((thread, f"an entry is outside {box.name}"))
             else:
