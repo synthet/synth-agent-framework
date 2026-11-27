@@ -1,6 +1,6 @@
 {
   "id": "merge-pr-gates-on-not-started-ci-and-local-steps",
-  "description": "Protect /merge-pr's gate: it merges when CI already passed on the exact head commit (all runs success, nothing outside Actions failing, not BLOCKED), or when some runs passed and the rest could not start (only those are replayed), or only when no CI job ran a step (Actions could not start) or the repository has no CI at all, after the workflow's own run: steps, or with no CI the project's declared checks, pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr, and a no-CI repository is handled here, not sent to /ship-pr.",
+  "description": "Protect /merge-pr's gate: it merges when CI already passed on the exact head commit (all runs success, nothing outside Actions failing, not BLOCKED), or when some runs passed and the rest could not start (only those are replayed), or only when no CI job ran a step (Actions could not start), no run ever registered for the head commit (CI never triggered), or the repository has no CI at all, after the workflow's own run: steps, or with no CI the project's declared checks, pass in a clean worktree on the exact head commit, with the review signed off; a job that ran and failed goes to /ship-pr, and a commit with no CI result (never triggered or no CI) is handled here, not sent to /ship-pr, which needs CI.",
   "target_asset": ".claude/skills/merge-pr/SKILL.md",
   "linked_docs": [],
   "must_contain": [
@@ -13,7 +13,7 @@
     "gh pr merge <n> --merge --delete-branch --match-head-commit <sha>",
     "Merging when any CI job actually ran and failed, or while runs are still pending.",
     "**The repository has no CI.** This case holds only when **all** of these are true:",
-    "don't\nsend them to `/ship-pr`",
+    "don't send them to `/ship-pr`",
     "a diff review alone isn't\nevidence for a merge",
     "**CI already passed.** This case holds only when **all** of these are true:",
     "every run's conclusion is\n  `success`",
@@ -26,7 +26,7 @@
     "the same cause failed a run on another recent commit",
     "every run is `completed`. Pending or queued runs mean wait",
     "the head is still `<sha>`, with no new commits;",
-    "Exactly one of these four cases must hold.",
+    "Exactly one of these five cases must hold.",
     "**Wait for runs to register.**",
     "runs\n  that were all skipped don't count as passed",
     "**Some runs passed, the rest could not start.** This case holds only when **all** of these are true:",
@@ -46,7 +46,12 @@
     "every run was skipped",
     "- the same not-started cause failed a run on another recent commit outside this PR's branch;",
     "replay only the workflows whose jobs didn't start, in step 3",
-    "the base branch's latest few commits have none either"
+    "the base branch's latest few commits have none either",
+    "`/ship-pr` needs CI.",
+    "**CI never triggered.** Workflows exist, but GitHub never registered a run for this commit.",
+    "no run exists for `<sha>` at least 15 minutes after the head was pushed",
+    "Don't push,\nclose and reopen the PR, or dispatch a workflow to get a run",
+    "If the PR deletes its workflows, replay the base branch's."
   ],
   "must_not_contain": []
 }
