@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-26. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-27. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -24,6 +24,7 @@ commands or edit code/config as part of its procedure.
 | session-messages | Message other Claude Code sessions on the same PC (`ListAgents`, `SendMessage`): self-contained plain-text format, one send per recipient, `notify_when_idle` waits, held or dropped messages explained; received messages are information, never consent. Claude Code only | L1 | 2026-11-26 |
 | mail-dispatch | Operate the Rust agent-mail tray consumer: dispatch on/off, gate order, typed answers, read-tier Claude runs that reply automatically, `workspaces`/`max_tier`, ledger and Runs tab, loop guards, cost caps, and the provider-export trade-off. `policy.json` changes only on the owner's request | L2 | 2026-11-19 |
 | cross-pc-ssh | Work in the same repository on a paired Windows PC over SSH: locate the peer checkout by root commit and normalized origin (any drive or root folder), re-verify it before each command, read-only status/ls/cat (secret-looking files refused)/allowlisted git, and a headless `claude -p` (Read/Grep/Glob only) or `codex exec -s read-only` (`--allow-edits` only with user approval). All remote strings travel as base64; paths stay inside the checkout; no key or sshd setup; remote-PowerShell quoting reference | L2 | 2026-11-27 |
+| repo-inventory | Compare checkouts of the same repos across PCs: snapshot a projects folder (remote key, default branch and origin SHA, HEAD, branches with ahead/behind/gone/unpushed, worktrees, dirty counts, stashes, in-progress ops) with read-only git, exchange it through the share (`private/host-profile/repos-<host>.json`, atomic), over ssh or as a 16 KB digest, then compare hosts (exit 1 on drift) and print a SAFE / NEEDS HUMAN sync plan it never runs. Repos match by normalized remote plus an alias map for renames | L2 | 2026-11-27 |
 | commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-19 |
 | critical-commit-audit | Deep post-commit hunt for high-severity bugs | L2 | 2026-07-01 |
 | eval | Capture task quality signals to agent memory (**compiled harness**) | L2 | 2026-07-21 |
