@@ -67,7 +67,7 @@ commands or edit code/config as part of its procedure.
 | lint-format-security | ruff, eslint, clippy, trivy, shellcheck (**compiled harness**) | L2 | 2026-08-14 |
 | mcp-code-intelligence | MCP tiers; fff, Graphify, Serena, Zoekt, embeddings | L2 | 2026-07-21 |
 | graphify-knowledge-graph | Query/refresh Graphify MCP or CLI for architecture paths and communities | L2 | 2026-07-21 |
-| windows-agent-tooling | Native Windows agent workflows | L2 | 2026-11-04 |
+| windows-agent-tooling | Native Windows agent workflows; CLI resolution, persistence and host-context diagnostics | L2 | 2026-11-26 |
 | wsl2-agent-tooling | WSL2 build/test/MCP workflows | L2 | 2026-07-03 |
 
 ### Consolidated reusable setup library

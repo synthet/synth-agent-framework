@@ -82,7 +82,9 @@ See [commands-requiring-confirmation.md](../cli-tools-overview/references/comman
 
 ## Troubleshooting
 
-- Execution policy blocking scripts: user adjusts policy for their profile.
+- CLI upgrade still launches an old version, a launcher is blocked, or login differs between
+  terminals: follow [CLI resolution and host context](references/cli-resolution.md). Inspect
+  shell overrides and installation ownership before reinstalling or proposing policy changes.
 - Docker not running: start Docker Desktop before compose commands.
 - `node -e` with a regex, backslashes or nested quotes: PowerShell and Git Bash both mangle the escapes, and Node reports `Unterminated regexp literal` or `Invalid hexadecimal escape sequence`. Write the script to a `.js` or `.mjs` file and run `node` on that file.
 - Python in terminal sandboxes: Microsoft Store Python execution aliases (`WindowsApps\python.exe`) fail under process isolation with `ResourceUnavailable`. For sandboxed inspection/scripting, use native PowerShell cmdlets (`Select-String`, `ConvertFrom-Json`, `Get-Content`); invoke `python.exe` with sandbox bypass approval or use standalone Python/uv executables.
@@ -101,3 +103,4 @@ See [commands-requiring-confirmation.md](../cli-tools-overview/references/comman
 
 - [ ] Core tools available in PowerShell
 - [ ] Chosen Windows vs WSL for this task
+- [ ] CLI resolution fixes verified with the bare command in fresh sessions of the affected shells
