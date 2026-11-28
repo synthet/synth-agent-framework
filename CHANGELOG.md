@@ -86,6 +86,10 @@ All notable changes to this framework are documented here. The format follows
 
 ### Fixed
 
+- `cross-pc-messages` v4: `new --print` no longer crashes on a cp1252 console; `new` and `reply` refuse
+  an empty or untitled draft; the skill warns that an unquoted heredoc can mangle a draft. Folds in the
+  2026-11-19 agent-mail rollout lessons (agent-mailbox, mail-dispatch: install and upgrade steps never
+  edit `policy.json`).
 - `/resume-task` no longer marks a session as waiting for a reply when it ends on a harness command
   such as `/export` or `/model`. Those get no reply in the transcript, so the turn before them counts.
   The skill also documents the layout of `candidates.json`.
