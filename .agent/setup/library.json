@@ -512,6 +512,13 @@
       "projects": []
     },
     {
+      "id": "remote-build",
+      "source": ".claude/skills/remote-build",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "bg-status",
       "source": ".claude/skills/bg-status",
       "pack": "global",
@@ -542,6 +549,13 @@
     {
       "id": "cross-pc-ssh",
       "source": ".claude/skills/cross-pc-ssh",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "repo-inventory",
+      "source": ".claude/skills/repo-inventory",
       "pack": "global",
       "global": true,
       "projects": []

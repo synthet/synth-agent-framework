@@ -43,10 +43,10 @@ If the tree is dirty, say so in the report.
 
 Compare what this build would put on the machine with what is already there: every file in the install
 folder (SHA-256), every PATH launcher's text, every shortcut's fields and every icon file. If all of them
-match, report **already deployed** and stop here. A quick first check, when the install records its source commit
+match, report **already deployed** and stop here. Run no `stop` step, make no backup, copy nothing and
+don't refresh the icon cache. A quick first check, when the install records its source commit
 (a `SOURCE.txt` or similar beside the executable): `git log <sha>..HEAD -- <code paths>` empty means only docs changed
-since that build. Run no `stop` step, make no backup, copy nothing and
-don't refresh the icon cache. A rerun on the same commit still rebuilds (usually from cache), but it
+since that build. A rerun on the same commit still rebuilds (usually from cache), but it
 changes nothing on the machine.
 
 ## 4. Check what is running

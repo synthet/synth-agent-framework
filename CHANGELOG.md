@@ -8,6 +8,12 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `repo-inventory` skill: snapshots every checkout under a projects folder with read-only git (remote
+  key, default branch and origin SHA, HEAD, branches with ahead/behind/gone/unpushed, worktrees, dirty
+  counts, stashes, merge or rebase in progress), exchanges snapshots through the cross-PC share, over
+  ssh or as a digest under 16 KB, compares hosts per repo (exit 1 on drift) and prints a per-host plan
+  of safe fetch / fast-forward steps and items that need a human. It never runs the plan. Repos match
+  by normalized remote, with an alias map for renamed repos.
 - `/build` and `/deploy` skills: `/build` builds the current project for this OS with its own
   procedure and checks each artifact by running it. `/deploy` (user-typed only) installs that build
   on this machine only: the project's own procedure first, else a per-user install folder with a
