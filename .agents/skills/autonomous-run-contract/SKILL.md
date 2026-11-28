@@ -50,7 +50,9 @@ Then confirm the other three loop preconditions:
 | Decomposition varies per run | Orchestrator + workers | Dynamic specialization |
 | Alternatives must stay alive | Commit DAG / branches | Preserves lineage instead of forcing one winner |
 | Facts must survive the session | Persisted artifacts + graph | Transcript summaries are not memory |
+| More agents than one conversation can coordinate (dozens or more), or orchestration that must be re-runnable | Dynamic workflow script — **recommend only** | The script holds the plan and results; subagents suit a few delegated tasks per turn |
 
+A workflow runs only after the user opts in (asks for one, or says `ultracode`); recommend it and wait.
 Escalate a level only when the current one has demonstrably failed. More agents increase activity
 and opacity before they increase quality.
 

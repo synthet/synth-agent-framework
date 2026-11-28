@@ -1,7 +1,7 @@
 ---
 name: ship-pr
-description: "Take one GitHub PR from open to merged: read its failing CI jobs, find the root cause, fix and push, wait for green on the exact head commit (in a repository with no CI, a local run of its documented checks on that commit), merge, verify and clean up. Runs only when the user types /ship-pr, with a PR number, URL or branch; with none it uses the current branch's PR."
-capability: "Fix a pull request's CI failures and merge it once CI is green on its exact head commit (or, with no CI, once its documented checks pass locally on that commit), within fixed limits."
+description: "Take one GitHub PR from open to merged: read its failing CI jobs, find the root cause, fix and push, wait for green on the exact head commit (in a repository with no CI, or with --no-ci when CI exists but can't run, a local run of its checks on that commit), merge, verify and clean up. Runs only when the user types /ship-pr, with a PR number, URL or branch and optionally --no-ci; with none it uses the current branch's PR."
+capability: "Fix a pull request's CI failures and merge it once CI is green on its exact head commit (or, with no CI, or with --no-ci when CI can't run, once its checks pass locally on that commit), within fixed limits."
 side_effect_level: remote_write
 approval_required: true
 requires_tools: "git and gh; the project's own test commands."
@@ -17,6 +17,11 @@ pushing fixes to this PR's branch and merging this PR, and nothing else. It is n
 Never run this skill on your own initiative.
 
 One PR per run. If the user names none, use the current branch's PR. If that's ambiguous, stop and ask.
+
+**Option `--no-ci`** (`/ship-pr 27 --no-ci`): the user accepts a local gate when the repository has
+CI but it can't run, for example because Actions stopped at a spending limit. It changes only step 2b
+and applies only to the PR named in that same command. Never infer it from earlier messages, and never
+carry it to another PR or a later run.
 
 ## 1. Confirm the target
 
@@ -44,12 +49,17 @@ and passed,** even when the checks already look green. A new commit on the PR re
 
    The exit status is the result, so nothing may follow the watch. A trailing `echo` or a pipe to
    `tail` reports success whatever happened.
+
+   If `gh pr checks` or the check-runs API returns HTTP 403, the token lacks checks access. Watch
+   through the Actions runs API instead: `gh run list --commit <sha>`, then
+   `gh run watch <id> --exit-status > /dev/null` for each run. Say in the report that this view can't
+   see statuses from outside Actions.
 3. **Read the results for the exact head commit.**
    - **An empty conclusion is not a pass.** A check with no result is still running.
    - **No checks at all is not green.** Find out which of these it is:
      - **CI exists but didn't run.** The base or head branch has workflow files, recent base commits
        have check runs or commit statuses, or branch protection requires checks. Stop and report:
-       the workflow may skip these paths, or be disabled or broken.
+       the workflow may skip these paths, or be disabled or broken. With `--no-ci`, go to step 2b.
      - **The repository has no CI.** Neither branch has workflow files, and neither the head commit
        nor the base branch's latest commits have any check runs or commit statuses. Go to step 2a,
        which takes the place of the watch.
@@ -75,6 +85,31 @@ Typing `/ship-pr` on such a repo accepts that gate.
 4. **Branch protection still applies.** If `gh pr view` shows `mergeStateStatus` `BLOCKED`, stop and
    report: the repository requires something this run can't provide.
 
+## 2b. `--no-ci`: CI exists but can't run
+
+Only when the user typed `--no-ci`. The merge gate becomes a local run on the exact head commit, plus
+proof that no check ran the PR's code and failed.
+
+1. **Every non-green check must have never run the project's code.** Read each one's annotations
+   (`gh api repos/<owner>/<repo>/check-runs/<id>/annotations`) and its steps. It qualifies only if:
+   - the job never started, for example "The job was not started because recent account payments
+     have failed or your spending limit needs to be increased", or no runner was available; or
+   - it failed on a repository setting before any project step, such as "Code scanning is not
+     enabled" or "Dependency review is not supported".
+
+   A workflow skipped by its path filter didn't apply. **Any check that built, linted or tested the
+   code and failed disqualifies `--no-ci`:** go to step 3 as usual.
+2. **Do the one infrastructure rerun first.** If the checks then pass, continue from step 2 without
+   the option.
+3. **Gate locally on a clean checkout of the head commit,** as in step 2a: a temporary worktree, every
+   command exits 0. Run what the skipped workflows would have run for this PR's paths, taken from the
+   workflow files. When no workflow covers the changed files (docs, tracker files), the gate is the
+   review in item 4 plus parsing or loading each changed file.
+4. **Review the diff yourself:** it holds only the files the PR is meant to change, the added lines
+   have no machine paths, identities or credentials, and it merges cleanly onto the base branch.
+5. **Branch protection still wins.** `mergeStateStatus` `BLOCKED` stops the run; never merge with
+   admin rights.
+
 ## 3. Fix
 
 Handle every failing job, one cause at a time.
@@ -88,7 +123,7 @@ Handle every failing job, one cause at a time.
    | Caused by this PR | Fails here, passes on the base branch | Fix the code |
    | Already broken on base | The base branch's latest run fails the same way | Stop and report |
    | Flaky test | Force the timing, and show it fail the same way | Fix the race in the test |
-   | Infrastructure | The log shows a runner, network or quota error | One rerun, then stop |
+   | Infrastructure | The log shows a runner, network or quota error | One rerun, then stop (with `--no-ci`, step 2b) |
 
 3. **Find the root cause before editing.** A test that passes locally and fails in CI is usually a
    race. Force it, for example by delaying a mock, and confirm the same error before changing anything.
@@ -109,7 +144,7 @@ that it turns green: a rerun can hide a real race.
 
 Merging is the last step. Immediately before it, re-read the PR and confirm all of this:
 
-- the head commit is the one the step 2 watch, or the step 2a local run, passed on;
+- the head commit is the one the step 2 watch, or the step 2a or 2b local run, passed on;
 - every required check passed on that commit;
 - the PR is mergeable with no conflicts, and no review has changed;
 - no new commits arrived.
@@ -170,4 +205,7 @@ Report once, at the end:
 Then give the merge commit, what ran on the final commit, the base branch CI result, anything
 skipped, and each item left with its reason and command. Say plainly what wasn't verified, and any cause you didn't establish.
 When step 2a was the gate, say the merge rested on a local run, list each command with its result,
-and suggest adding CI.
+and suggest adding CI. When step 2b was the gate, say the merge was made without CI on the user's
+`--no-ci`, list each check that didn't run with the reason from its annotation, each local command
+with its result, and what CI would have covered that the local run didn't (other platforms, for
+example). Name what would make CI run again.

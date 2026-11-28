@@ -8,6 +8,45 @@ All notable changes to this framework are documented here. The format follows
 
 ### Added
 
+- `repo-inventory` skill: snapshots every checkout under a projects folder with read-only git (remote
+  key, default branch and origin SHA, HEAD, branches with ahead/behind/gone/unpushed, worktrees, dirty
+  counts, stashes, merge or rebase in progress), exchanges snapshots through the cross-PC share, over
+  ssh or as a digest under 16 KB, compares hosts per repo (exit 1 on drift) and prints a per-host plan
+  of safe fetch / fast-forward steps and items that need a human. It never runs the plan. Repos match
+  by normalized remote, with an alias map for renamed repos.
+- `/build` and `/deploy` skills: `/build` builds the current project for this OS with its own
+  procedure and checks each artifact by running it. `/deploy` (user-typed only) installs that build
+  on this machine only: the project's own procedure first, else a per-user install folder with a
+  backup of the previous version, CLI tools in the user's PATH folder, and desktop shortcuts with new
+  icon file names, then reads back the version, shortcut and icon. It stops on running or locked
+  targets and never touches MCP registrations, scheduled tasks, settings or PATH. Per-project details
+  live in `.agent/deploy.json`.
+- `/merge-pr` skill: merges one PR whose CI exists but cannot start (Actions billing, spending limit,
+  used-up minutes). It proves that no job ran a step, runs every workflow `run:` step in a clean
+  detached worktree on the head commit, requires the review sign-off, and merges pinned to that
+  commit. A job that ran and failed sends the PR back to `/ship-pr`. A repository with no CI at all
+  (no workflows, no runs, no outside checks on the head commit) is handled here too: it runs the
+  project's declared checks in that worktree instead of sending the user to `/ship-pr`. When CI already
+  passed on the head commit, `/merge-pr` merges after the same re-checks instead of sending the user to
+  `/ship-pr`.
+  In every case it reads check runs and commit statuses outside Actions and stops on a failing or
+  pending one, stops on `mergeStateStatus` `BLOCKED`, and does at most one infrastructure rerun
+  first. Unlike `/ship-pr`, it removes the fresh worktree it made when no step created links in it.
+  A mix of passed and not-started runs is its own case (only the not-started workflows are replayed);
+  "no CI" also requires the base branch to have no workflows and no checks; and every case waits for
+  runs to register after a fresh push.
+- `/ship-pr`: when `gh pr checks` returns HTTP 403, watch through the Actions runs API instead. This
+  fallback lived only in hand-edited installed copies; those copies are now reviewed adoptions in
+  `library.json`, so `agent_setup.py` can update them to the current skill.
+- `/ship-pr <n> --no-ci`: for a repository whose CI exists but can't run (for example, Actions stopped
+  at a spending limit). It merges only when no failing check ran the project's code, after the one
+  infrastructure rerun and a local run on a clean checkout of the head commit, and it reports the
+  merge as made without CI. The option is typed per PR and never inferred.
+- `/step-back` skill: mid-task check against the contract. It takes the goal, acceptance criteria and
+  scope from the agent-flow ticket, spec, backlog item or pinned goal, and gives each criterion a
+  Verified, Failed or Unknown verdict with evidence. It maps every change back to a criterion and flags
+  drift outside `scope_paths`, then re-plans through `next-steps`.
+- `decide-with-agents` skill: settles a decision, research question or plan approval by investigation. It runs independent sub-agents with the model chosen by task complexity (Fable for decisions and reviews, Opus for multi-file analysis, Sonnet for narrow facts), checks what they claim, lets Jev make the final call in one batched request, and writes a provenance receipt. It links to `use-jev` for Jev's thresholds and hard limits.
 - agent-flow skills in the global tier: `agent-flow`, `flow-next`, `flow-work`, `flow-complete`, `flow-plan`, `flow-review`, `flow-status`, `flow-land` and `flow-loop`. They apply only in projects with an `.agent-flow/` folder.
 - `/ship-pr` skill: takes one PR from open to merged. It fixes CI failures at the root cause, runs the
   steps CI skipped after a failure, waits for green on the exact head commit, then merges and
@@ -26,6 +65,16 @@ All notable changes to this framework are documented here. The format follows
 
 ### Changed
 
+- `commit-and-push`: the leak scan before a public push must block the push. A hit exits non-zero, and
+  a warning followed by `scan; git push` is not a gate.
+- `test-driven-development`: when a bug writes to the wrong place, the RED run performs that write.
+  The test asserts the resolved target before the write, and fixtures stay away from real user state.
+- `windows-agent-tooling`: `node -e` escape problems also happen in Git Bash, so use a script file.
+- `/next-steps` keeps every open item from its report as an action item in the harness task list, with
+  the owner in the title, or as an `A1..An` checklist when there is no task list. `/step-by-step` takes
+  its steps from those items. It keeps one item in progress at a time, closes each only after its check
+  passes, and loops until no item of its own is pending. It also asks another session with `SendMessage`
+  before making a small change in a checkout that session holds.
 - `bg-status` finds repositories from `PROJECTS_ROOT` or the current repository, not a fixed path.
 - Shorter descriptions for the five longest skills, which reduces listing cost in every harness.
 - `use-jev` and `ship-pr` gain refinements first made in installed copies, including a required CI watch before merging.
@@ -37,6 +86,11 @@ All notable changes to this framework are documented here. The format follows
 
 ### Fixed
 
+- `/resume-task` no longer marks a session as waiting for a reply when it ends on a harness command
+  such as `/export` or `/model`. Those get no reply in the transcript, so the turn before them counts.
+  The skill also documents the layout of `candidates.json`.
+- `/resume-task` clears a Claude Code session's interrupted flag once the agent replies after the
+  interruption, so one early interruption no longer marks the whole session as interrupted.
 - Credential checks no longer match hyphenated words that contain `sk-`, which blocked planning.
 - `framework-*` aliases point at installed skills instead of keeping a command's relative paths.
 - Installed skills no longer nest copies of sibling `SKILL.md` files under `references/shared/`.
@@ -109,7 +163,7 @@ All notable changes to this framework are documented here. The format follows
 ### Fixed
 
 - Antigravity Windows terminal sandbox compatibility: expanded tilde paths in `deny_read`
-  rules to absolute Windows paths (`C:\Users\owner\.ssh`) and enforced
+  rules to absolute Windows paths (`%USERPROFILE%\.ssh`) and enforced
   `allowNonWorkspaceAccess: true` on Windows to eliminate `readonly /: non-absolute file path`.
 - Claude Code `PermissionRequest` hook ordering: placed the Jev gate hook (`timeout: 15s`)
   at index 0 ahead of notification hooks.

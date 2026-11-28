@@ -435,6 +435,13 @@
       "projects": []
     },
     {
+      "id": "housekeeping",
+      "source": ".claude/skills/housekeeping",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "step-by-step",
       "source": ".claude/skills/step-by-step",
       "pack": "global",
@@ -463,8 +470,50 @@
       "projects": []
     },
     {
+      "id": "step-back",
+      "source": ".claude/skills/step-back",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "ship-pr",
       "source": ".claude/skills/ship-pr",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "merge-pr",
+      "source": ".claude/skills/merge-pr",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "fix-it",
+      "source": ".claude/skills/fix-it",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "build",
+      "source": ".claude/skills/build",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "deploy",
+      "source": ".claude/skills/deploy",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "remote-build",
+      "source": ".claude/skills/remote-build",
       "pack": "global",
       "global": true,
       "projects": []
@@ -477,8 +526,50 @@
       "projects": []
     },
     {
+      "id": "cross-pc-messages",
+      "source": ".claude/skills/cross-pc-messages",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "agent-mailbox",
+      "source": ".claude/skills/agent-mailbox",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "mail-dispatch",
+      "source": ".claude/skills/mail-dispatch",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "cross-pc-ssh",
+      "source": ".claude/skills/cross-pc-ssh",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "repo-inventory",
+      "source": ".claude/skills/repo-inventory",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
       "id": "use-jev",
       "source": ".claude/skills/use-jev",
+      "pack": "global",
+      "global": true,
+      "projects": []
+    },
+    {
+      "id": "decide-with-agents",
+      "source": ".claude/skills/decide-with-agents",
       "pack": "global",
       "global": true,
       "projects": []
@@ -997,6 +1088,16 @@
       "relative": ".gemini/antigravity-cli/skills/release-bump/SKILL.md",
       "sha256": "8bca2af12a1564e1c392c26356cc9873540568fa581f18a8ac5aef6e8ab36ff3",
       "skill": "release-bump"
+    },
+    {
+      "relative": ".claude/skills/ship-pr/SKILL.md",
+      "sha256": "011c54ad09e3c5abaa449edbfa552a9428f62a5c338fc81fe04ade196bc2792b",
+      "skill": "ship-pr"
+    },
+    {
+      "relative": ".agents/skills/ship-pr/SKILL.md",
+      "sha256": "011c54ad09e3c5abaa449edbfa552a9428f62a5c338fc81fe04ade196bc2792b",
+      "skill": "ship-pr"
     }
   ],
   "reviewed_resource_adoptions": [

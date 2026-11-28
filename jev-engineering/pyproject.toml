@@ -13,6 +13,9 @@ dependencies = [
   "jev-mcp",
 ]
 
+[project.urls]
+Homepage = "https://synthet.github.io"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<10",

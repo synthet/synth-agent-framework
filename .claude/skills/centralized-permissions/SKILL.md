@@ -1,6 +1,6 @@
 ---
 name: centralized-permissions
-description: "Use when setting up, reconfiguring, auditing, or restoring the centralized AI agent permission decision gate (hook → Jev → audit → approve | ask) across Claude Code, Cursor/Grok, Codex, and Antigravity, or when reconciling global and project permission policies in <projects-root>."
+description: "Use when setting up, reconfiguring, auditing, or restoring the centralized AI agent permission decision gate (hook → Jev → audit → approve | ask) across Claude Code, Cursor/Grok, Codex, and Antigravity, or when reconciling global and project permission policies in <projects-root>, or when writing or reviewing Claude Code custom auto-mode classifier rules (`autoMode` environment / allow / soft_deny)."
 capability: "Configure, audit, reconcile, apply, and restore centralized cross-harness permission review and safe command tiers."
 side_effect_level: local_write
 approval_required: true
@@ -64,6 +64,7 @@ python -m scripts.manage_permissions verify
 - Tuning command classification tiers, thresholds, or regex patterns in `<projects-root>\_agent-infra\jev\config\permission-policy.json`.
 - Auditing recent permission decisions, latency, or denials across harnesses.
 - Rolling back permission settings after unexpected behavior or test failures.
+- Writing, reviewing or fixing Claude Code custom auto-mode rules (`autoMode` in user settings), or acting on `claude auto-mode critique` feedback.
 
 ### Do NOT use for:
 - Routine coding tasks where permissions are already active.
@@ -129,6 +130,11 @@ Every modified file is restored to its exact byte-identical state and verified b
 
 ---
 
+### Workflow D: Claude Code Auto-Mode Custom Rules
+Before you add or change `autoMode` (`environment`, `allow`, `soft_deny`, `hard_deny`) in user settings, read [references/auto-mode-custom-rules.md](references/auto-mode-custom-rules.md). It covers where the classifier reads rules from, keeping `"$defaults"`, scoping per-repo environment entries, slot choice, `soft_deny` wording, and `allow` holes such as wildcards inside nested shell strings. Plan the edit and get the owner's go-ahead like any permission change, then check it with `claude auto-mode config` and `claude auto-mode critique`.
+
+---
+
 ## 4. Option Routing (Implementation Choices)
 
 When coding agents prompt with multiple implementation options (e.g., Antigravity `ask_question`, Claude choice prompts), the request can be evaluated through Jev Choice:
@@ -145,3 +151,14 @@ When coding agents prompt with multiple implementation options (e.g., Antigravit
 - **Redaction First:** Secrets (`.env`, `secrets.json`, tokens) are never sent to Jev or logged in plaintext.
 - **Auditing Mandatory:** An unaudited decision cannot approve. If SQLite WAL write fails, the gate abstains.
 - **Preserve Credentials:** Never touch API keys, tokens, or `.git/config` during permission setup.
+
+### Claude Code Mode (`CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1`)
+
+Claude writes JavaScript that the `REPL` tool runs, and that one piece of code can make many tool calls.
+
+- Each call inside the code still goes through the `deny`/`ask` rules and the `PreToolUse` hooks under its own tool name, so a `Bash|PowerShell` matcher still sees the shell calls. It never sees the JavaScript. To screen the code itself, match `REPL` and read `tool_input.code`.
+- In auto mode the classifier reviews each piece of code, not each call, and cannot see values computed at run time (a path taken from search output). Keep hard limits in deterministic deny rules, never in the classifier.
+- A `PreToolUse` hook that fails or times out refuses the call, even with `onFailure` unset (`the hook failed`, `the hook did not finish`). Once code has run in the session, a timeout refuses any later call too. Keep the gate's own deadline (8 s) under the hook `timeout`.
+- The Code Mode page covers `PreToolUse` and `PostToolUse` hooks, not `PermissionRequest`, so it doesn't say whether this gate's hook fires for calls made from code. After the first Code Mode session, check `audit --since 1d` before you rely on it.
+
+Source: Claude Code docs, "Run tool calls from code with Code Mode".

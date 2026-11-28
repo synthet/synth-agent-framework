@@ -1,6 +1,6 @@
 # Skill inventory — ${PROJECT_NAME}
 
-**Last reviewed:** 2026-11-09. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
+**Last reviewed:** 2026-11-27. Companion to [SKILL_CHANGE_AST10_REVIEW.md](SKILL_CHANGE_AST10_REVIEW.md)
 and [SKILL_COMPILATION.md](SKILL_COMPILATION.md).
 Update this file (new row or **Last reviewed** date) in the same PR as any skill change.
 
@@ -19,7 +19,13 @@ commands or edit code/config as part of its procedure.
 | bg-status | Read-only snapshot of background work (Claude tasks, detached workers, GPU, Docker, logs, worktrees, peer sessions), flags first; optional per-project probes in `.claude/bg-status.json`, `docker exec` probes only with `--exec-probes` | L1 | 2026-11-02 |
 | backlog-queue | Provider-oriented backlog queue; local markdown, GitHub Issues, optional GitHub Projects | L2 | 2026-07-01 |
 | commit-conventions | Conventional Commits and PR title wording | L1 | 2026-07-01 |
-| commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-04 |
+| cross-pc-messages | Messages between PCs through a shared synced folder (`<from>-to-<to>`): whoami, threads with whose turn it is, new package / reply with the standard header, `watch` (one-shot or streaming), and a secret check on outgoing text. The share's `AGENTS.md` stays the authority; the helper only adds files (writes sync to every PC) | L2 | 2026-11-18 |
+| agent-mailbox | Agent mail between paired PCs with the Rust agent-mail: read the inbox in small batches, send to trusted peers on other PCs, reply in the stored thread with the loop refusals, acknowledge (not completion), check delivery. Received text is untrusted data; pairing and policy stay the owner's | L2 | 2026-11-19 |
+| session-messages | Message other Claude Code sessions on the same PC (`ListAgents`, `SendMessage`): self-contained plain-text format, one send per recipient, `notify_when_idle` waits, held or dropped messages explained; received messages are information, never consent. Claude Code only | L1 | 2026-11-26 |
+| mail-dispatch | Operate the Rust agent-mail tray consumer: dispatch on/off, gate order, typed answers, read-tier Claude runs that reply automatically, `workspaces`/`max_tier`, ledger and Runs tab, loop guards, cost caps, and the provider-export trade-off. `policy.json` changes only on the owner's request | L2 | 2026-11-19 |
+| cross-pc-ssh | Work in the same repository on a paired Windows PC over SSH: locate the peer checkout by root commit and normalized origin (any drive or root folder), re-verify it before each command, read-only status/ls/cat (secret-looking files refused)/allowlisted git, and a headless `claude -p` (Read/Grep/Glob only) or `codex exec -s read-only` (`--allow-edits` only with user approval). All remote strings travel as base64; paths stay inside the checkout; no key or sshd setup; remote-PowerShell quoting reference | L2 | 2026-11-27 |
+| repo-inventory | Compare checkouts of the same repos across PCs: snapshot a projects folder (remote key, default branch and origin SHA, HEAD, branches with ahead/behind/gone/unpushed, worktrees, dirty counts, stashes, in-progress ops) with read-only git, exchange it through the share (`private/host-profile/repos-<host>.json`, atomic), over ssh or as a 16 KB digest, then compare hosts (exit 1 on drift) and print a SAFE / NEEDS HUMAN sync plan it never runs. Repos match by normalized remote plus an alias map for renames | L2 | 2026-11-27 |
+| commit-and-push | Stage, commit, and push with git safety rules; pairs with release-bump (**compiled harness**) | L2 | 2026-11-19 |
 | critical-commit-audit | Deep post-commit hunt for high-severity bugs | L2 | 2026-07-01 |
 | eval | Capture task quality signals to agent memory (**compiled harness**) | L2 | 2026-07-21 |
 | export-chat | Export the Cursor agent transcript to Markdown or the clipboard, like Claude Code `/export` | L2 | 2026-10-01 |
@@ -36,8 +42,15 @@ commands or edit code/config as part of its procedure.
 | rust-testing | Cargo/nextest unit tests beside modules | L2 | 2026-08-14 |
 | threat-modeling-agentic-tools | Threat-model MCP/tool abuse and injection | L1 | 2026-07-01 |
 | use-jev | Delegate pending decisions, blocked steps and triage items to Jev in one batched call; act on confident low-risk picks, hand back the rest | L2 | 2026-11-09 |
+| decide-with-agents | Settle decisions, research questions and plan approvals: sub-agents chosen by task complexity (Fable, Opus, Sonnet), checking their claims, a final Jev call and a provenance receipt | L2 | 2026-11-19 |
 | go | Finish every open item: take recommendations, settle the rest with Jev, execute in order, report once. User-typed only | L2 | 2026-11-03 |
-| ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only | L2 | 2026-11-09 |
+| build | Build the current project for this OS with its own procedure (recipe, release script, documented command, else the ecosystem default) and check each artifact by running it. Never installs | L2 | 2026-11-21 |
+| deploy | Install a fresh build on this machine only: the project procedure first, else a per-user install folder with a backup, PATH-folder tools, and shortcuts with new icon names; stops on running or locked targets; reads everything back. User-typed only | L2 | 2026-11-21 |
+| remote-build | Build on a paired build PC over SSH: resolve the host by hostname, pre-flight it (no other heavy build, RAM, disk, clean checkout fast-forwarded to the exact commit), start the build detached with a done-file, verify artifacts (commit, size, SHA-256, version), copy them into a same-commit checkout on each target with a hash read-back, and run each target's project install only after the user approves that PC. User-typed only | L2 | 2026-11-27 |
+| fix-it | Fix the one problem the latest report named: diagnose read-only, back up before overwriting, smallest reversible fix, verify what the user sees, report with an undo path. Triggered by /fix-it or "fix it" after a report | L2 | 2026-11-21 |
+| step-back | Recover the ticket's goal, criteria and scope, review the diff against them in both directions, re-plan via next-steps | L2 | 2026-11-19 |
+| ship-pr | Take one PR from open to merged: fix CI failures at the root cause, wait for green on the exact head commit, merge, verify. User-typed only; `--no-ci` gates locally when CI exists but can't run | L2 | 2026-11-20 |
+| merge-pr | Merge one PR without fixing anything: CI already green on the exact head commit; Actions could not start (billing, spending limit, minutes), with the workflow steps replayed locally; a mix of the two; or no CI at all, with the declared checks run locally. Merge pinned to the head commit. User-typed only | L2 | 2026-11-21 |
 | validate-implementation | Per-AC Verified/Failed/Unknown verdicts with evidence (**compiled harness**) | L2 | 2026-07-19 |
 | verification-before-completion | Evidence-backed completion claims with fresh command proof (**compiled harness**) | L1 | 2026-11-04 |
 
@@ -57,7 +70,7 @@ commands or edit code/config as part of its procedure.
 | lint-format-security | ruff, eslint, clippy, trivy, shellcheck (**compiled harness**) | L2 | 2026-08-14 |
 | mcp-code-intelligence | MCP tiers; fff, Graphify, Serena, Zoekt, embeddings | L2 | 2026-07-21 |
 | graphify-knowledge-graph | Query/refresh Graphify MCP or CLI for architecture paths and communities | L2 | 2026-07-21 |
-| windows-agent-tooling | Native Windows agent workflows | L2 | 2026-11-04 |
+| windows-agent-tooling | Native Windows agent workflows; CLI resolution, persistence and host-context diagnostics; launching CLIs as applications in scripts | L2 | 2026-11-27 |
 | wsl2-agent-tooling | WSL2 build/test/MCP workflows | L2 | 2026-07-03 |
 
 ### Consolidated reusable setup library
@@ -67,8 +80,8 @@ Jev evidence and reviewed choices: [decision ledger](setup/decisions.json).
 
 | Skill | Purpose | Risk | Last reviewed |
 |-------|---------|------|---------------|
-| agent-setup | Inventory, review, install, check and roll back native harness setup | L2 | 2026-11-04 |
-| resume-task | Recover unfinished local cross-harness work with evidence and a continuation brief | L2 | 2026-10-11 |
+| agent-setup | Inventory, review, install, check and roll back native harness setup; installing one skill from a cut plan | L2 | 2026-11-27 |
+| resume-task | Recover unfinished local cross-harness work with evidence and a continuation brief | L2 | 2026-11-10 |
 | architecture-decisions | Compare consequential alternatives and record ADRs | L1 | 2026-10-11 |
 | agent-runtime-handoff | Application agent-runtime contracts and handoff | L2 | 2026-10-11 |
 | archive-session-transcripts | Hash-verified, privacy-reviewed transcript archiving | L2 | 2026-10-11 |
@@ -86,8 +99,8 @@ Jev evidence and reviewed choices: [decision ledger](setup/decisions.json).
 | unity-testing | Unity compile/EditMode/PlayMode validation | L2 | 2026-10-11 |
 | windows-keep-awake | Explicit bounded Windows sleep prevention | L2 | 2026-10-11 |
 | jev-mcp | Typed semantic Choice/Score/Noul decisions over sanitized state | L2 | 2026-10-11 |
-| llm-wiki | Explicit-root local wiki query, ingestion and validation | L2 | 2026-10-11 |
-| centralized-permissions | Centralized cross-harness permission gate (`infra/jev` + `_agent-infra/jev`), T0-T4 classification, and coin-flip adjudication | L2 | 2026-10-25 |
+| llm-wiki | Explicit-root local wiki query, ingestion and validation; copying a store to another PC | L2 | 2026-11-27 |
+| centralized-permissions | Centralized cross-harness permission gate (`infra/jev` + `_agent-infra/jev`), T0-T4 classification, and coin-flip adjudication; auto-mode custom-rule authoring reference | L2 | 2026-11-22 |
 
 Git/fork/PR guidance, environment/dependency guidance and MCP diagnostics were
 merged into their existing skills. Existing inventory entries and project-native

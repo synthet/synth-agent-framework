@@ -1,0 +1,41 @@
+{
+  "skill_name": "repo-inventory",
+  "evals": [
+    {
+      "id": "what-is-out-of-sync",
+      "prompt": "What's out of sync between my desktop and laptop checkouts? Uncommitted stuff, unpushed branches, repos only on one of them.",
+      "should_trigger": true,
+      "expected_behavior": "Runs snapshot --share on this PC (or reads the share), then compare; reports drift per repo and host (missing clones, unpushed branches, dirty or conflicted trees, stale fetches) and offers plan; does not run any sync step."
+    },
+    {
+      "id": "plan-sync-updates",
+      "prompt": "Which repos can I safely pull on beta, and which need me to look at them first?",
+      "should_trigger": true,
+      "expected_behavior": "Runs plan over the snapshots (share or --ssh beta); lists SAFE fetch / pull --ff-only commands only for clean repos on the default branch that are behind, and NEEDS HUMAN items with reasons; never executes them without the user's go-ahead."
+    },
+    {
+      "id": "renamed-repo",
+      "prompt": "I renamed acme/old-tool to acme/new-tool on GitHub and the PCs now show them as different repos in the inventory.",
+      "should_trigger": true,
+      "expected_behavior": "Uses an alias map ({\"acme/old-tool\": \"acme/new-tool\"}) via --aliases or the config so compare groups both checkouts under one key."
+    },
+    {
+      "id": "summary-for-mail",
+      "prompt": "Send the other PC's agent a short digest of my repo state over agent mail.",
+      "should_trigger": true,
+      "expected_behavior": "Runs snapshot --summary (under 16 KB) and hands the text to agent-mailbox as the body; does not paste the full JSON."
+    },
+    {
+      "id": "near-miss-peer-file",
+      "prompt": "Show me README.md in this repo's checkout on the laptop.",
+      "should_trigger": false,
+      "expected_behavior": "cross-pc-ssh (one repository, a file on the peer), not this skill."
+    },
+    {
+      "id": "near-miss-handoff",
+      "prompt": "Leave a handoff note for the agent on the other PC about tomorrow's work.",
+      "should_trigger": false,
+      "expected_behavior": "cross-pc-messages or agent-mailbox instead."
+    }
+  ]
+}

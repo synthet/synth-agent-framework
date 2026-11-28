@@ -41,6 +41,11 @@ repo has no practical test seam. State the limitation and choose the closest ver
    code where practical, and keep one assertion focus. For bug fixes, reproduce the reported symptom.
 3. **Verify RED.** Run the smallest relevant test command. Confirm it fails for the intended reason,
    not typos, imports, fixtures, or setup. If it passes immediately, rewrite it.
+   If the bug writes to the wrong place (wrong folder, wrong database, real user state), the RED run
+   carries out that write for real. In the test, assert the resolved target before the call that
+   writes, so broken code fails before it touches anything. Keep fixtures where a wrong path can't
+   reach real state: temp folders often sit under the real home folder. Afterwards, check that the
+   RED run left nothing outside the fixture.
 4. **GREEN — implement the minimum.** Write only enough production code to pass. Do not add
    unrequested options, abstractions, cleanup, or drive-by edits. If the test is hard to write, treat
    that as design feedback and improve the seam.

@@ -75,6 +75,7 @@ Full diagram: [windows-wsl-split.md](../cli-tools-overview/references/windows-ws
 - In Git Bash, prefix `MSYS_NO_PATHCONV=1` to `docker exec`/`docker run` commands that pass container paths (`-w /app`, `/data/...`); otherwise MSYS rewrites them to Windows paths ("Cwd must be an absolute path").
 - Use the same prefix for `git show <ref>:<path>`. MSYS can rewrite the argument into something like `origin\main;.agent\...`, and a pipeline can hide the failure behind a plausible result such as a `0` count. With the prefix set,
   write paths in that command as `D:/...`: MSYS no longer translates `/d/...`, so `git -C /d/...` fails.
+- From Git Bash, `powershell -NoProfile -Command "... $_ ..."` lets bash expand `$_` and other `$vars` inside the double quotes before PowerShell parses them, which causes parser errors. Use the harness PowerShell tool, single-quote the command (`-Command '...'`), or put it in a `.ps1` file and run it with `-File`.
 - See [bounded-output-patterns.md](../cli-tools-overview/references/bounded-output-patterns.md).
 
 ## Commands Requiring Confirmation
@@ -83,9 +84,11 @@ See [commands-requiring-confirmation.md](../cli-tools-overview/references/comman
 
 ## Troubleshooting
 
-- Execution policy blocking scripts: user adjusts policy for their profile.
+- CLI upgrade still launches an old version, a launcher is blocked, or login differs between
+  terminals: follow [CLI resolution and host context](references/cli-resolution.md). Inspect
+  shell overrides and installation ownership before reinstalling or proposing policy changes.
 - Docker not running: start Docker Desktop before compose commands.
-- `node -e` with a regex or nested quotes: PowerShell eats the escapes and Node reports `Unterminated regexp literal`. Write the script to a `.js` file and run `node` on that file.
+- `node -e` with a regex, backslashes or nested quotes: PowerShell and Git Bash both mangle the escapes, and Node reports `Unterminated regexp literal` or `Invalid hexadecimal escape sequence`. Write the script to a `.js` or `.mjs` file and run `node` on that file.
 - Python in terminal sandboxes: Microsoft Store Python execution aliases (`WindowsApps\python.exe`) fail under process isolation with `ResourceUnavailable`. For sandboxed inspection/scripting, use native PowerShell cmdlets (`Select-String`, `ConvertFrom-Json`, `Get-Content`); invoke `python.exe` with sandbox bypass approval or use standalone Python/uv executables.
 
 ## Windows Notes
@@ -102,3 +105,4 @@ See [commands-requiring-confirmation.md](../cli-tools-overview/references/comman
 
 - [ ] Core tools available in PowerShell
 - [ ] Chosen Windows vs WSL for this task
+- [ ] CLI resolution fixes verified with the bare command in fresh sessions of the affected shells
