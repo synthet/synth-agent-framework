@@ -44,7 +44,7 @@ import sys
 import time
 from pathlib import Path
 
-VERSION = "3"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
+VERSION = "4"  # equals the share's private/guides/cross-pc-messages/v<N>/; bump on any change
 SKILL_DIR = Path(__file__).resolve().parents[1]
 RELEASES = Path("private/guides/cross-pc-messages")  # relative to the share root
 # Global skill trees, as installed by the framework's agent_setup.py.
@@ -450,6 +450,19 @@ HEADER = """# {title}
 """
 
 
+def drafted(path, title: bool) -> str:
+    """A draft's text, refusing a blank one, or one without a `# ` title line when `title` is set.
+
+    An unquoted shell heredoc runs the backticks in Markdown and can leave the draft empty; a blank note
+    would still sync to every PC."""
+    text = norm(path).read_text(encoding="utf-8")
+    if not text.strip():
+        sys.exit(f"{path} is empty. Write the draft with an editor or a quoted heredoc (<<'EOF'). Nothing was written to the share.")
+    if title and not any(line.startswith("# ") for line in text.splitlines()):
+        sys.exit(f"{path} has no '# ' title line; start from `new --print`. Nothing was written to the share.")
+    return text
+
+
 def cmd_new(args) -> int:
     c = context(args)
     if not TOPIC.match(args.topic):
@@ -469,7 +482,7 @@ def cmd_new(args) -> int:
         return 0
     text = template
     if args.from_file:  # atomic send: the drafted text lands in the share only if it's clean
-        text = norm(args.from_file).read_text(encoding="utf-8")
+        text = drafted(args.from_file, title=True)
         findings = scan(text.splitlines())
         if findings:
             for n, kind in findings:
@@ -532,7 +545,7 @@ def cmd_reply(args) -> int:
                          reply=f"{args.to}-to-{c['host']}/{base}-<kind>.md")
     text = text.replace("- **Purpose:**", replies_to(folder, original) + "\n- **Purpose:**")
     if args.body_file:  # atomic reply: generated header + drafted body, written only if clean
-        body = norm(args.body_file).read_text(encoding="utf-8")
+        body = drafted(args.body_file, title=False)
         head = [line for line in text.splitlines() if "**Purpose:**" not in line and "**Don't:**" not in line]
         text = "\n".join(head) + "\n\n" + body
         findings = scan(text.splitlines())
@@ -926,7 +939,15 @@ def scan(lines: list[str], text_file: bool = True) -> list[tuple[int, str]]:
     return found
 
 
+def _utf8_stdio() -> None:
+    """Print UTF-8 even on a legacy console code page (cp1252 can't encode the templates' arrows)."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv=None) -> int:
+    _utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--root", help="share root (default: CROSS_PC_SHARE, config file, common locations)")
     ap.add_argument("--host", help="this host's id (default: CROSS_PC_HOST, then COMPUTERNAME)")

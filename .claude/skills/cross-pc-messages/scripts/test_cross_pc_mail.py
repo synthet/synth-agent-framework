@@ -204,6 +204,33 @@ def test_new_from_file_is_atomic_and_checked(share, tmp_path, capsys):
     assert "pong" in (share / "alpha-to-beta" / "hello-2026-11-18" / "README.md").read_text(encoding="utf-8")
 
 
+def test_new_print_survives_a_cp1252_console(share):
+    # The header has a non-ASCII arrow; a cp1252 stdout used to raise UnicodeEncodeError.
+    import subprocess
+    import sys as _sys
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+    r = subprocess.run([_sys.executable, str(Path(mail.__file__)), "new", "--to", "beta", "--topic", "hello",
+                        "--date", "2026-11-18", "--print"], env=env, capture_output=True, timeout=60)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert "ALPHA " + chr(0x2192) + " BETA" in r.stdout.decode("utf-8")
+    assert not (share / "alpha-to-beta" / "hello-2026-11-18").exists()
+
+
+def test_empty_or_titleless_draft_is_refused(share, tmp_path, capsys):
+    # An unquoted shell heredoc can expand a Markdown draft to nothing; the share must not get a blank note.
+    (share / "beta-to-alpha" / "ping-2026-11-18.md").write_text("# ping\n", encoding="utf-8")
+    draft = tmp_path / "draft.md"
+    for text in ("", "  \n\n", "just a line, no title\n"):
+        draft.write_text(text, encoding="utf-8")
+        with pytest.raises(SystemExit):
+            mail.main(["new", "--to", "beta", "--topic", "blank", "--note", "--date", "2026-11-18", "--from-file", str(draft)])
+    assert not (share / "alpha-to-beta" / "blank-2026-11-18.md").exists()
+    draft.write_text(" \n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        mail.main(["reply", "--to", "beta", "--re", "ping-2026-11-18.md", "--kind", "ack", "--body-file", str(draft)])
+    assert not (share / "alpha-to-beta" / "ping-2026-11-18-ack.md").exists()
+
+
 def test_watch_once_reports_new_file_and_ignores_partial_downloads(share, capsys):
     inbox = share / "beta-to-alpha"
 
@@ -237,3 +264,14 @@ def test_check_flags_secrets_without_echoing_them(tmp_path, capsys):
     clean = tmp_path / "ok.md"
     clean.write_text("Point to private/auth/env/ for the token.\n", encoding="utf-8")
     assert mail.main(["check", str(clean)]) == 0
+
+
+def test_print_survives_a_cp1252_console(share):
+    """A Windows console with a legacy code page must not crash on the template's arrow."""
+    import subprocess
+    import sys
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+    run = subprocess.run([sys.executable, str(Path(mail.__file__)), "new", "--to", "beta", "--topic", "enc-test", "--print"],
+                         capture_output=True, env=env)
+    assert run.returncode == 0, run.stderr.decode("utf-8", "replace")
+    assert "→" in run.stdout.decode("utf-8")
