@@ -1,0 +1,35 @@
+{
+  "skill_name": "elaborate-spec",
+  "evals": [
+    {
+      "id": "elaborate-downloads-spec",
+      "prompt": "elaborate ~/Downloads/product-roadmap-2026-11-26.md",
+      "should_trigger": true,
+      "expected_behavior": "Counts backlog IDs, pins the baseline sha, asks what deliverable if unclear, searches branches/tracker/wiki for prior work, fans out explorers, verifies load-bearing claims first-hand, writes spec.md + items + tasks, runs spec_checks.py coverage/graph/paths."
+    },
+    {
+      "id": "ground-plan-in-code",
+      "prompt": "This plan was written in another chat without looking at the repo. Check every item against the code and tell me what is already done and what is wrong.",
+      "should_trigger": true,
+      "expected_behavior": "Produces a per-item baseline (exists/partial/missing/conflict) with paths and a list of corrections; links existing tickets instead of duplicating."
+    },
+    {
+      "id": "per-item-specs-and-import",
+      "prompt": "Turn the roadmap doc into one spec per backlog item plus tasks, and import them into agent-flow.",
+      "should_trigger": true,
+      "expected_behavior": "Writes items/<ID>.md and tasks.md, runs import-table, dry-runs flow_import_tasks and stops for confirmation before the real import."
+    },
+    {
+      "id": "near-miss-new-spec",
+      "prompt": "Write a spec for adding dark mode to the settings page.",
+      "should_trigger": false,
+      "expected_behavior": "framework-spec (new spec from intent), not elaborate-spec."
+    },
+    {
+      "id": "near-miss-tickets",
+      "prompt": "Import specs/ORDERS/tasks.md into the tracker.",
+      "should_trigger": false,
+      "expected_behavior": "flow-plan (already-grounded T-n tasks)."
+    }
+  ]
+}
