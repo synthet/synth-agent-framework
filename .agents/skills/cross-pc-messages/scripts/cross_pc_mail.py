@@ -926,7 +926,15 @@ def scan(lines: list[str], text_file: bool = True) -> list[tuple[int, str]]:
     return found
 
 
+def _utf8_stdio() -> None:
+    """Print UTF-8 even on a legacy console code page (cp1252 can't encode the templates' arrows)."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure") and (stream.encoding or "").lower().replace("-", "") != "utf8":
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv=None) -> int:
+    _utf8_stdio()
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--root", help="share root (default: CROSS_PC_SHARE, config file, common locations)")
     ap.add_argument("--host", help="this host's id (default: CROSS_PC_HOST, then COMPUTERNAME)")
